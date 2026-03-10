@@ -1,4 +1,4 @@
-FROM gui AS ebpf
+FROM localhost/gui:latest AS ebpf
 
 # 1. Installazione bpftop via DNF per l'analisi real-time dell'overhead dei programmi eBPF 
 RUN dnf -y install bpftop && dnf clean all

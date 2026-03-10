@@ -1,4 +1,4 @@
-FROM hardware AS gui
+FROM localhost/hardware:latest AS gui
 
 # 1. Installazione dell'ambiente desktop Wayland-Only
 # Selezione chirurgica dei pacchetti Plasma escludendo le dipendenze legacy Xorg [7, 16]

@@ -1,4 +1,4 @@
-FROM core AS hardware
+FROM localhost/core:latest AS hardware
 
 # 1. Configurazione del repository COPR per linux-cachyos [5, 14]
 # Importazione statica della definizione.repo per bypassare dipendenze dnf a runtime
