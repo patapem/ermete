@@ -29,14 +29,7 @@ RUN dnf -y remove kernel kernel-core kernel-modules kernel-modules-core kernel-m
 
 # 4. Configurazione UKI (systemd-ukify) 
 # Impostazione del profilo di generazione dell'immagine PE per il caricamento EFI
-COPY <<-"EOF" /etc/kernel/uki.conf
-[UKI]
-SecureBootSigningTool=systemd-sbsign
-SignKernel=false
-# Abilitare in produzione fornendo i certificati PEM corretti per sbsign:
-# SecureBootPrivateKey=/etc/kernel/secure-boot-private-key.pem
-# SecureBootCertificate=/etc/kernel/secure-boot-certificate.pem
-EOF
+COPY uki.conf /etc/kernel/uki.conf
 
 # 5. Organizzazione strutturale UKI per bootc
 # Bootc si attende che il binario EFI e i moduli risiedano in /usr/lib/modules/$KVER/ [2]

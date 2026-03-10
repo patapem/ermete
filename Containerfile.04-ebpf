@@ -15,20 +15,7 @@ RUN curl -L -O https://github.com/cilium/tetragon/releases/download/v${TETRAGON_
     rm -rf tetragon-v${TETRAGON_VERSION}-amd64*
 
 # 3. Definizione del servizio Systemd nativo per l'orchestrazione di Tetragon
-COPY <<-"EOF" /usr/lib/systemd/system/tetragon.service
-[Unit]
-Description=Tetragon eBPF Security Observability & Enforcement
-After=network.target
-
-
-Type=simple
-ExecStart=/usr/local/bin/tetragon --bpf-lib=/usr/local/lib/tetragon/ --export-filename=/var/log/tetragon/tetragon.log
-Restart=always
-RestartSec=3
-
-[Install]
-WantedBy=multi-user.target
-EOF
+COPY tetragon.service /usr/lib/systemd/system/tetragon.service
 
 # 4. Attivazione dichiarativa del demone Tetragon
 RUN mkdir -p /var/log/tetragon && \
