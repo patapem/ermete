@@ -1,0 +1,45 @@
+FROM core AS hardware
+
+# 1. Configurazione del repository COPR per linux-cachyos [5, 14]
+# Importazione statica della definizione.repo per bypassare dipendenze dnf a runtime
+RUN echo "[copr:copr.fedorainfracloud.org:bieszczaders:kernel-cachyos]" > /etc/yum.repos.d/cachyos.repo && \
+    echo "name=Copr repo for kernel-cachyos owned by bieszczaders" >> /etc/yum.repos.d/cachyos.repo && \
+    echo "baseurl=https://download.copr.fedorainfracloud.org/results/bieszczaders/kernel-cachyos/fedora-\$releasever-\$basearch/" >> /etc/yum.repos.d/cachyos.repo && \
+    echo "type=rpm-md" >> /etc/yum.repos.d/cachyos.repo && \
+    echo "skip_if_unavailable=True" >> /etc/yum.repos.d/cachyos.repo && \
+    echo "gpgcheck=1" >> /etc/yum.repos.d/cachyos.repo && \
+    echo "gpgkey=https://download.copr.fedorainfracloud.org/results/bieszczaders/kernel-cachyos/pubkey.gpg" >> /etc/yum.repos.d/cachyos.repo && \
+    echo "repo_gpgcheck=0" >> /etc/yum.repos.d/cachyos.repo && \
+    echo "enabled=1" >> /etc/yum.repos.d/cachyos.repo && \
+    echo "enabled_metadata=1" >> /etc/yum.repos.d/cachyos.repo
+
+# 2. Iniezione direttive layout per rpm-ostree / bootc
+# Risolve l'incompatibilità tra kernel-install e l'ambiente OCI.[13]
+RUN mkdir -p /usr/lib/kernel && \
+    echo "layout=ostree" > /usr/lib/kernel/install.conf
+
+# 3. Sostituzione atomica del Kernel
+# Rimozione categorica del kernel-core di default; installazione del kernel CachyOS e strumenti UKI
+RUN dnf -y remove kernel kernel-core kernel-modules kernel-modules-core kernel-modules-extra |
+
+| true && \
+    rm -rf /usr/lib/modules/* && \
+    dnf -y install kernel-cachyos systemd-ukify sbsigntools uki-direct && \
+    dnf clean all
+
+# 4. Configurazione UKI (systemd-ukify) 
+# Impostazione del profilo di generazione dell'immagine PE per il caricamento EFI
+COPY <<-"EOF" /etc/kernel/uki.conf
+[UKI]
+SecureBootSigningTool=systemd-sbsign
+SignKernel=false
+# Abilitare in produzione fornendo i certificati PEM corretti per sbsign:
+# SecureBootPrivateKey=/etc/kernel/secure-boot-private-key.pem
+# SecureBootCertificate=/etc/kernel/secure-boot-certificate.pem
+EOF
+
+# 5. Organizzazione strutturale UKI per bootc
+# Bootc si attende che il binario EFI e i moduli risiedano in /usr/lib/modules/$KVER/ [2]
+RUN KVER=$(ls /usr/lib/modules/ | head -n 1) && \
+    mkdir -p /usr/lib/modules/${KVER} && \
+    echo "Rigenerazione initramfs e firma UKI saranno delegate a bootc-image-builder durante il rendering dell'immagine bare-metal."

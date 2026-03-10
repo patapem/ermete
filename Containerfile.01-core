@@ -1,0 +1,85 @@
+FROM quay.io/fedora/fedora-bootc:41 AS core
+
+# 1. Purga del Machine-ID per il deployment agnostico e riproducibile
+# Garantisce che ogni nodo nudo generi una propria identità crittografica.[13]
+RUN truncate -s 0 /etc/machine-id
+
+# 2. Rimozione dei pacchetti non essenziali e installazione subsystem critici
+RUN dnf -y remove NetworkManager-ssh systemd-networkd && \
+    dnf -y install zram-generator nftables systemd-resolved && \
+    dnf clean all
+
+# 3. Configurazione ZRAM per swap ottimizzato in memoria
+# Utilizzo di zstd per il bilanciamento matematico tra ratio di compressione e cicli CPU
+COPY <<-"EOF" /etc/systemd/zram-generator.conf
+[zram0]
+zram-size = ram
+compression-algorithm = zstd
+swap-priority = 1000
+fs-type = swap
+EOF
+
+# 4. Ottimizzazione Kernel e Hardening Rete (sysctl)
+# Disabilitazione ICMP redirects, ottimizzazione TCP BBR e tuning swappiness
+COPY <<-"EOF" /etc/sysctl.d/99-hardening-performance.conf
+# Hardening dello stack TCP/IP
+net.ipv4.conf.all.accept_redirects = 0
+net.ipv4.conf.all.secure_redirects = 0
+net.ipv4.conf.all.send_redirects = 0
+net.ipv4.tcp_syncookies = 1
+net.ipv4.tcp_rfc1337 = 1
+
+# Performance Routing e Congestion Control
+net.ipv4.tcp_congestion_control = bbr
+net.core.default_qdisc = fq
+
+# Ottimizzazione ZRAM Swap Manager
+vm.swappiness = 180
+vm.watermark_boost_factor = 0
+vm.watermark_scale_factor = 125
+vm.page-cluster = 0
+
+# Restrizioni Kernel Exploitation
+kernel.dmesg_restrict = 1
+kernel.kptr_restrict = 2
+kernel.unprivileged_bpf_disabled = 1
+EOF
+
+# 5. Configurazione Firewall Dichiarativo (Nftables)
+# Policy default DROP. Gestione esplicita di loopback, established e ICMP essenziali.
+COPY <<-"EOF" /etc/nftables.conf
+#!/usr/sbin/nft -f
+flush ruleset
+
+table inet filter {
+    chain input {
+        type filter hook input priority 0; policy drop;
+        
+        # Accettare traffico stabilito
+        ct state established,related accept
+        # Drop immediato di pacchetti invalidi
+        ct state invalid drop
+        
+        # Loopback nativo
+        iifname "lo" accept
+        
+        # ICMP essenziali per la topologia di rete
+        ip protocol icmp icmp type { destination-unreachable, router-advertisement, time-exceeded, parameter-problem } accept
+        ip6 nexthdr icmpv6 icmpv6 type { destination-unreachable, packet-too-big, time-exceeded, parameter-problem, nd-router-advert, nd-neighbor-solicit, nd-neighbor-advert } accept
+    }
+    chain forward {
+        type filter hook forward priority 0; policy drop;
+    }
+    chain output {
+        type filter hook output priority 0; policy accept;
+    }
+}
+EOF
+
+# 6. Attivazione dichiarativa dei servizi Systemd in fase di build
+RUN systemctl enable nftables.service && \
+    systemctl enable systemd-resolved.service
+
+# 7. Assicurare che SELinux rimanga in enforcing
+# La persistenza di questo parametro è essenziale nel transito verso OSTree
+RUN sed -i 's/^SELINUX=.*/SELINUX=enforcing/' /etc/selinux/config

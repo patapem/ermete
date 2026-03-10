@@ -1,0 +1,46 @@
+name: Build and Push Fedora Atomic OS
+on:
+  push:
+    branches: [ "main" ]
+  schedule:
+    - cron: '0 2 * * *' # Build notturna
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write # Permesso esplicito obbligatorio per GHCR
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      # Ottimizzazione spazio disco per gestire immagini OS-size
+      - name: Free up disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /opt/ghc
+          sudo rm -rf "/usr/local/share/boost"
+          sudo rm -rf "$AGENT_TOOLSDIRECTORY"
+
+      - name: Build Core Layer
+        run: podman build -t ermete:core -f Containerfile.01-core.
+
+      - name: Build Hardware Layer
+        run: podman build -t ermete:hardware -f Containerfile.02-hardware.
+
+      - name: Build GUI Layer
+        run: podman build -t ermete:gui -f Containerfile.03-gui.
+
+      - name: Build Final eBPF Layer
+        run: podman build -t ghcr.io/patapem/ermete:latest -f Containerfile.04-ebpf.
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }} # Popolato dinamicamente
+          password: ${{ secrets.GITHUB_TOKEN }} # Token temporaneo nativo
+
+      - name: Push OS Image to Registry
+        run: podman push ghcr.io/patapem/ermete:lates

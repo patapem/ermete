@@ -1,0 +1,23 @@
+FROM hardware AS gui
+
+# 1. Installazione dell'ambiente desktop Wayland-Only
+# Selezione chirurgica dei pacchetti Plasma escludendo le dipendenze legacy Xorg [7, 16]
+RUN dnf -y install \
+    plasma-desktop \
+    plasma-workspace-wayland \
+    kwin-wayland \
+    sddm \
+    sddm-wayland-plasma \
+    konsole \
+    dolphin \
+    polkit-kde \
+    && dnf clean all
+
+# 2. Configurazione SDDM per forzare il compositing Wayland nativo
+# Evita l'inizializzazione di un server X primario per la schermata di login
+RUN mkdir -p /etc/sddm.conf.d && \
+    echo -e "[General]\nDisplayServer=wayland\n\nCompositorCommand=kwin_wayland --drm --no-lockscreen --no-global-shortcuts --locale1" > /etc/sddm.conf.d/10-wayland.conf
+
+# 3. Attivazione del Display Manager (SDDM) e target grafico
+RUN systemctl enable sddm.service && \
+    systemctl set-default graphical.target

@@ -1,0 +1,38 @@
+FROM gui AS ebpf
+
+# 1. Installazione bpftop via DNF per l'analisi real-time dell'overhead dei programmi eBPF 
+RUN dnf -y install bpftop && dnf clean all
+
+# 2. Installazione Cilium Tetragon via tarball ufficiale
+# Sostituisce i pacchetti non aggiornati nei repository standard, precompilato per amd64 [17]
+ENV TETRAGON_VERSION=1.12.0
+RUN curl -L -O https://github.com/cilium/tetragon/releases/download/v${TETRAGON_VERSION}/tetragon-v${TETRAGON_VERSION}-amd64.tar.gz && \
+    tar -xzf tetragon-v${TETRAGON_VERSION}-amd64.tar.gz && \
+    cp tetragon-v${TETRAGON_VERSION}-amd64/tetragon /usr/local/bin/ && \
+    cp tetragon-v${TETRAGON_VERSION}-amd64/tetra /usr/local/bin/ && \
+    mkdir -p /usr/local/lib/tetragon/ && \
+    cp tetragon-v${TETRAGON_VERSION}-amd64/bpf/objs/*.o /usr/local/lib/tetragon/ && \
+    rm -rf tetragon-v${TETRAGON_VERSION}-amd64*
+
+# 3. Definizione del servizio Systemd nativo per l'orchestrazione di Tetragon
+COPY <<-"EOF" /usr/lib/systemd/system/tetragon.service
+[Unit]
+Description=Tetragon eBPF Security Observability & Enforcement
+After=network.target
+
+
+Type=simple
+ExecStart=/usr/local/bin/tetragon --bpf-lib=/usr/local/lib/tetragon/ --export-filename=/var/log/tetragon/tetragon.log
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+# 4. Attivazione dichiarativa del demone Tetragon
+RUN mkdir -p /var/log/tetragon && \
+    systemctl enable tetragon.service
+
+# 5. Validazione finale e garbage collection di OSTree/bootc
+RUN bootc container lint
