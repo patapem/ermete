@@ -24,16 +24,16 @@ jobs:
           sudo rm -rf "$AGENT_TOOLSDIRECTORY"
 
       - name: Build Core Layer
-        run: podman build -t ermete:core -f Containerfile.01-core.
+        run: podman build -t ermete:core -f Containerfile.01-core .
 
       - name: Build Hardware Layer
-        run: podman build -t ermete:hardware -f Containerfile.02-hardware.
+        run: podman build -t ermete:hardware -f Containerfile.02-hardware .
 
       - name: Build GUI Layer
-        run: podman build -t ermete:gui -f Containerfile.03-gui.
+        run: podman build -t ermete:gui -f Containerfile.03-gui .
 
       - name: Build Final eBPF Layer
-        run: podman build -t ghcr.io/patapem/ermete:latest -f Containerfile.04-ebpf.
+        run: podman build -t ghcr.io/patapem/ermete:latest -f Containerfile.04-ebpf .
 
       - name: Login to GitHub Container Registry
         uses: docker/login-action@v3
