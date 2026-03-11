@@ -1,9 +1,9 @@
 FROM localhost/gui:latest AS ebpf
 
-# 1. Installazione bpftop via DNF per l'analisi real-time dell'overhead dei programmi eBPF 
+# 1. Installazione bpftop
 RUN dnf -y install bpftop && dnf clean all
 
-# 2. Installazione Cilium Tetragon via tarball ufficiale (Discovery Dinamica Infallibile)
+# 2. Installazione Cilium Tetragon via tarball ufficiale
 ENV TETRAGON_VERSION=1.6.0
 RUN curl -fsSL -O https://github.com/cilium/tetragon/releases/download/v${TETRAGON_VERSION}/tetragon-v${TETRAGON_VERSION}-amd64.tar.gz && \
     curl -fsSL -O https://github.com/cilium/tetragon/releases/download/v${TETRAGON_VERSION}/tetragon-v${TETRAGON_VERSION}-amd64.tar.gz.sha256sum && \
@@ -15,12 +15,12 @@ RUN curl -fsSL -O https://github.com/cilium/tetragon/releases/download/v${TETRAG
     find /tmp/tetragon-release -type f -name "*.o" -exec cp {} /usr/local/lib/tetragon/ \; && \
     rm -rf /tmp/tetragon-release tetragon-v${TETRAGON_VERSION}-amd64*
 
-# 3. Definizione del servizio Systemd nativo per l'orchestrazione di Tetragon 
+# 3. Definizione del servizio Systemd
 COPY tetragon.service /usr/lib/systemd/system/tetragon.service
 
 # 4. Attivazione dichiarativa del demone Tetragon
 RUN mkdir -p /var/log/tetragon && \
     systemctl enable tetragon.service
 
-# 5. Validazione finale e garbage collection di OSTree/bootc
+# 5. Validazione finale e garbage collection
 RUN bootc container lint
