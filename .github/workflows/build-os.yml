@@ -10,18 +10,27 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      packages: write # Permesso esplicito obbligatorio per GHCR
+      packages: write # Obbligatorio per GHCR
+      id-token: write # Obbligatorio per Sigstore/Cosign (Keyless signing)
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      # Ottimizzazione spazio disco per gestire immagini OS-size
+      # Ottimizzazione spazio disco profonda per gestire immagini OS-size
       - name: Free up disk space
         run: |
           sudo rm -rf /usr/share/dotnet
           sudo rm -rf /opt/ghc
           sudo rm -rf "/usr/local/share/boost"
           sudo rm -rf "$AGENT_TOOLSDIRECTORY"
+          sudo docker system prune -af
+
+      # Generazione Tag Immutabili per Rollback OSTree
+      - name: Generate Tags
+        id: tags
+        run: |
+          echo "sha_short=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+          echo "date_tag=$(date +'%Y%m%d')" >> $GITHUB_OUTPUT
 
       - name: Build Core Layer
         run: podman build -t localhost/core:latest -f Containerfile.01-core .
@@ -32,15 +41,34 @@ jobs:
       - name: Build GUI Layer
         run: podman build -t localhost/gui:latest -f Containerfile.03-gui .
 
-      - name: Build Final eBPF Layer
-        run: podman build -t ghcr.io/patapem/ermete:latest -f Containerfile.04-ebpf .
+      - name: Build Final eBPF Layer & Tagging
+        run: |
+          podman build \
+            -t ghcr.io/${{ github.repository_owner }}/ermete:latest \
+            -t ghcr.io/${{ github.repository_owner }}/ermete:${{ steps.tags.outputs.sha_short }} \
+            -t ghcr.io/${{ github.repository_owner }}/ermete:${{ steps.tags.outputs.date_tag }} \
+            -f Containerfile.04-ebpf .
 
-      - name: Login to GitHub Container Registry
-        uses: docker/login-action@v3
+      # Autenticazione OCI nativa per Podman
+      - name: Login to GitHub Container Registry (Podman)
+        uses: redhat-actions/podman-login@v1
         with:
           registry: ghcr.io
-          username: ${{ github.actor }} # Popolato dinamicamente
-          password: ${{ secrets.GITHUB_TOKEN }} # Token temporaneo nativo
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Push OS Image to Registry
-        run: podman push ghcr.io/patapem/ermete:latest
+        run: |
+          podman push ghcr.io/${{ github.repository_owner }}/ermete:latest
+          podman push ghcr.io/${{ github.repository_owner }}/ermete:${{ steps.tags.outputs.sha_short }}
+          podman push ghcr.io/${{ github.repository_owner }}/ermete:${{ steps.tags.outputs.date_tag }}
+
+      # Supply Chain Security: Firma dell'immagine pushed
+      - name: Install Cosign
+        uses: sigstore/cosign-installer@v3.5.0
+
+      - name: Sign the Published Image
+        env:
+          COSIGN_EXPERIMENTAL: "true"
+        run: |
+          cosign sign --yes ghcr.io/${{ github.repository_owner }}/ermete:${{ steps.tags.outputs.sha_short }}
