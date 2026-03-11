@@ -16,7 +16,6 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      # Ottimizzazione spazio disco profonda per gestire immagini OS-size
       - name: Free up disk space
         run: |
           sudo rm -rf /usr/share/dotnet
@@ -25,7 +24,6 @@ jobs:
           sudo rm -rf "$AGENT_TOOLSDIRECTORY"
           sudo docker system prune -af
 
-      # Generazione Tag Immutabili per Rollback OSTree
       - name: Generate Tags
         id: tags
         run: |
@@ -49,7 +47,6 @@ jobs:
             -t ghcr.io/${{ github.repository_owner }}/ermete:${{ steps.tags.outputs.date_tag }} \
             -f Containerfile.04-ebpf .
 
-      # Autenticazione OCI nativa per Podman
       - name: Login to GitHub Container Registry (Podman)
         uses: redhat-actions/podman-login@v1
         with:
@@ -63,14 +60,13 @@ jobs:
           podman push ghcr.io/${{ github.repository_owner }}/ermete:${{ steps.tags.outputs.sha_short }}
           podman push ghcr.io/${{ github.repository_owner }}/ermete:${{ steps.tags.outputs.date_tag }}
 
-      # Supply Chain Security: Firma dell'immagine pushed
+      # Fase 1: Supply Chain Security (Firma crittografica)
       - name: Install Cosign
         uses: sigstore/cosign-installer@v3.5.0
 
       - name: Sign the Published Image
         env:
           COSIGN_EXPERIMENTAL: "true"
-        # PATCH APPLICATA: Ora firma anche il tag 'latest' che usiamo per il deploy sulla VM
         run: |
           cosign sign --yes ghcr.io/${{ github.repository_owner }}/ermete:latest
           cosign sign --yes ghcr.io/${{ github.repository_owner }}/ermete:${{ steps.tags.outputs.sha_short }}
