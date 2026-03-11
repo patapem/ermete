@@ -1,22 +1,21 @@
 FROM localhost/gui:latest AS ebpf
 
-# 1. Installazione bpftop via DNF per l'analisi real-time dell'overhead dei programmi eBPF 
+# 1. Installazione bpftop via DNF per l'analisi real-time
 RUN dnf -y install bpftop && dnf clean all
 
-# 2. Installazione Cilium Tetragon via tarball ufficiale (Sandbox + Discovery Dinamica)
+# 2. Installazione Cilium Tetragon via tarball ufficiale (Ottimizzato)
 ENV TETRAGON_VERSION=1.6.0
 RUN curl -fsSL -O https://github.com/cilium/tetragon/releases/download/v${TETRAGON_VERSION}/tetragon-v${TETRAGON_VERSION}-amd64.tar.gz && \
     curl -fsSL -O https://github.com/cilium/tetragon/releases/download/v${TETRAGON_VERSION}/tetragon-v${TETRAGON_VERSION}-amd64.tar.gz.sha256sum && \
     sha256sum -c tetragon-v${TETRAGON_VERSION}-amd64.tar.gz.sha256sum && \
-    mkdir -p /tmp/tetragon-release && \
-    tar -xzf tetragon-v${TETRAGON_VERSION}-amd64.tar.gz -C /tmp/tetragon-release && \
-    find /tmp/tetragon-release -type f -name "tetragon" -exec cp {} /usr/local/bin/ \; && \
-    find /tmp/tetragon-release -type f -name "tetra" -exec cp {} /usr/local/bin/ \; && \
-    mkdir -p /usr/local/lib/tetragon/ && \
-    find /tmp/tetragon-release -type f -name "*.o" -exec cp {} /usr/local/lib/tetragon/ \; && \
+    mkdir -p /usr/local/bin /usr/local/lib/tetragon /tmp/tetragon-release && \
+    tar -xzf tetragon-v${TETRAGON_VERSION}-amd64.tar.gz -C /tmp/tetragon-release --strip-components=1 && \
+    cp /tmp/tetragon-release/tetragon /usr/local/bin/ && \
+    cp /tmp/tetragon-release/tetra /usr/local/bin/ && \
+    cp /tmp/tetragon-release/bpf/objs/*.o /usr/local/lib/tetragon/ && \
     rm -rf /tmp/tetragon-release tetragon-v${TETRAGON_VERSION}-amd64*
 
-# 3. Definizione del servizio Systemd nativo per l'orchestrazione di Tetragon 
+# 3. Definizione del servizio Systemd nativo per l'orchestrazione di Tetragon
 COPY tetragon.service /usr/lib/systemd/system/tetragon.service
 
 # 4. Attivazione dichiarativa del demone Tetragon
