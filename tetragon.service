@@ -2,11 +2,21 @@
 Description=Tetragon eBPF Security Observability & Enforcement
 After=network.target
 
-
+[Service]
 Type=simple
 ExecStart=/usr/local/bin/tetragon --bpf-lib=/usr/local/lib/tetragon/ --export-filename=/var/log/tetragon/tetragon.log
 Restart=always
 RestartSec=3
+
+# Configurazione Risorse essenziale per eBPF
+LimitMEMLOCK=infinity
+
+# Systemd Hardening & Sandboxing
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+NoNewPrivileges=false
+ReadWritePaths=/var/log/tetragon/
 
 [Install]
 WantedBy=multi-user.target
