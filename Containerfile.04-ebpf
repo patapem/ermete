@@ -3,18 +3,20 @@ FROM localhost/gui:latest AS ebpf
 # 1. Installazione bpftop via DNF per l'analisi real-time dell'overhead dei programmi eBPF 
 RUN dnf -y install bpftop && dnf clean all
 
-# 2. Installazione Cilium Tetragon via tarball ufficiale
-# Sostituisce i pacchetti non aggiornati nei repository standard, precompilato per amd64 [17]
+# 2. Installazione Cilium Tetragon via tarball ufficiale (con validazione crittografica e fail-fast)
+# Sostituisce i pacchetti non aggiornati nei repository standard, precompilato per amd64 
 ENV TETRAGON_VERSION=1.12.0
-RUN curl -L -O https://github.com/cilium/tetragon/releases/download/v${TETRAGON_VERSION}/tetragon-v${TETRAGON_VERSION}-amd64.tar.gz && \
+RUN curl -fsSL -O https://github.com/cilium/tetragon/releases/download/v${TETRAGON_VERSION}/tetragon-v${TETRAGON_VERSION}-amd64.tar.gz && \
+    curl -fsSL -O https://github.com/cilium/tetragon/releases/download/v${TETRAGON_VERSION}/tetragon-v${TETRAGON_VERSION}-amd64.tar.gz.sha256sum && \
+    sha256sum -c tetragon-v${TETRAGON_VERSION}-amd64.tar.gz.sha256sum && \
     tar -xzf tetragon-v${TETRAGON_VERSION}-amd64.tar.gz && \
     cp tetragon-v${TETRAGON_VERSION}-amd64/tetragon /usr/local/bin/ && \
     cp tetragon-v${TETRAGON_VERSION}-amd64/tetra /usr/local/bin/ && \
     mkdir -p /usr/local/lib/tetragon/ && \
     cp tetragon-v${TETRAGON_VERSION}-amd64/bpf/objs/*.o /usr/local/lib/tetragon/ && \
-    rm -rf tetragon-v${TETRAGON_VERSION}-amd64*
+    rm -rf tetragon-v${TETRAGON_VERSION}-amd64* tetragon-v${TETRAGON_VERSION}-amd64.tar.gz.sha256sum
 
-# 3. Definizione del servizio Systemd nativo per l'orchestrazione di Tetragon
+# 3. Definizione del servizio Systemd nativo per l'orchestrazione di Tetragon 
 COPY tetragon.service /usr/lib/systemd/system/tetragon.service
 
 # 4. Attivazione dichiarativa del demone Tetragon
