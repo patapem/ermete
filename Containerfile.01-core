@@ -1,6 +1,35 @@
 FROM quay.io/fedora/fedora-bootc:41 AS core
 
 # 1. Purga del Machine-ID per il deployment agnostico e riproducibile
+RUN truncate -s 0 /etc/machine-id
+
+# 2. Rimozione dei pacchetti non essenziali e installazione subsystem critici
+# PATCH FIX: Aggiunti i pacchetti SELinux mancanti
+RUN dnf -y remove NetworkManager-ssh systemd-networkd && \
+    dnf -y install zram-generator nftables systemd-resolved policycoreutils selinux-policy-targeted && \
+    dnf clean all
+
+# 3. Configurazione ZRAM per swap ottimizzato in memoria
+COPY zram-generator.conf /etc/systemd/zram-generator.conf
+
+# 4. Ottimizzazione Kernel e Hardening Rete (sysctl)
+COPY 99-hardening-performance.conf /etc/sysctl.d/99-hardening-performance.conf
+
+# 5. Configurazione Firewall Dichiarativo (Nftables)
+COPY nftables.conf /etc/nftables.conf
+
+# 6. Attivazione dichiarativa dei servizi Systemd
+RUN systemctl enable nftables.service && \
+    systemctl enable systemd-resolved.service
+
+# 7. Assicurare che SELinux rimanga in enforcing
+RUN sed -i 's/^SELINUX=.*/SELINUX=enforcing/' /etc/selinux/config
+
+# 8. Fase 1 (Supply Chain): Pretendere firme Sigstore per il repository
+RUN mkdir -p /etc/containers/registries.d && \
+    echo -e "docker:\n  ghcr.io/patapem/ermete:\n    use-sigstore-attachments: true" > /etc/containers/registries.d/ermete.yamlFROM quay.io/fedora/fedora-bootc:41 AS core
+
+# 1. Purga del Machine-ID per il deployment agnostico e riproducibile
 # Garantisce che ogni nodo nudo generi una propria identità crittografica.
 RUN truncate -s 0 /etc/machine-id
 
