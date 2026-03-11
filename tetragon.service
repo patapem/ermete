@@ -15,6 +15,9 @@ LimitMEMLOCK=infinity
 ProtectSystem=strict
 ProtectHome=true
 PrivateTmp=true
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
 NoNewPrivileges=false
 ReadWritePaths=/var/log/tetragon/
 
