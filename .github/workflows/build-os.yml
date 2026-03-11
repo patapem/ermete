@@ -43,4 +43,4 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }} # Token temporaneo nativo
 
       - name: Push OS Image to Registry
-        run: podman push ghcr.io/patapem/ermete:lates
+        run: podman push ghcr.io/patapem/ermete:latest
