@@ -70,5 +70,7 @@ jobs:
       - name: Sign the Published Image
         env:
           COSIGN_EXPERIMENTAL: "true"
+        # PATCH APPLICATA: Ora firma anche il tag 'latest' che usiamo per il deploy sulla VM
         run: |
+          cosign sign --yes ghcr.io/${{ github.repository_owner }}/ermete:latest
           cosign sign --yes ghcr.io/${{ github.repository_owner }}/ermete:${{ steps.tags.outputs.sha_short }}
