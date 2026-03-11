@@ -13,7 +13,7 @@ RUN dnf -y install \
     polkit-kde \
     && dnf clean all
 
-# 2. Strumenti di Produttività per OS Immutabile (Escape Hatches)
+# 2. Strumenti di Produttività
 RUN dnf -y install \
     flatpak \
     distrobox \
@@ -22,7 +22,7 @@ RUN dnf -y install \
 
 # 3. Configurazione SDDM per forzare il compositing Wayland nativo
 RUN mkdir -p /etc/sddm.conf.d && \
-    echo -e "[General]\nDisplayServer=wayland\n\nCompositorCommand=kwin_wayland --drm --no-lockscreen --no-global-shortcuts --locale1" > /etc/sddm.conf.d/10-wayland.conf
+    echo -e "[General]\nDisplayServer=wayland\n\n[Wayland]\nCompositorCommand=kwin_wayland --drm --no-lockscreen --no-global-shortcuts --locale1" > /etc/sddm.conf.d/10-wayland.conf
 
 # 4. Attivazione del Display Manager (SDDM) e target grafico
 RUN systemctl enable sddm.service && \
