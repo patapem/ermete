@@ -5,7 +5,7 @@ RUN dnf -y install bpftop && dnf clean all
 
 # 2. Installazione Cilium Tetragon via tarball ufficiale (con validazione crittografica e fail-fast)
 # Sostituisce i pacchetti non aggiornati nei repository standard, precompilato per amd64 
-ENV TETRAGON_VERSION=1.12.0
+ENV TETRAGON_VERSION=1.6.0
 RUN curl -fsSL -O https://github.com/cilium/tetragon/releases/download/v${TETRAGON_VERSION}/tetragon-v${TETRAGON_VERSION}-amd64.tar.gz && \
     curl -fsSL -O https://github.com/cilium/tetragon/releases/download/v${TETRAGON_VERSION}/tetragon-v${TETRAGON_VERSION}-amd64.tar.gz.sha256sum && \
     sha256sum -c tetragon-v${TETRAGON_VERSION}-amd64.tar.gz.sha256sum && \
