@@ -7,12 +7,12 @@ RUN echo -e "[copr:copr.fedorainfracloud.org:bieszczaders:kernel-cachyos]\nname=
 RUN mkdir -p /usr/lib/kernel && \
     echo "layout=ostree" > /usr/lib/kernel/install.conf
 
-# 3. Swap Atomico del Kernel (Metodo sicuro per RPM-OSTree)
-# Usa dnf swap per direzionare le dipendenze sul nuovo pacchetto invece di fare remove/install
-# Questo preserva le macro dipendenze come selinux-policy e linux-firmware.
-RUN dnf -y swap kernel-core kernel-cachyos-core && \
-    dnf -y swap kernel-modules kernel-cachyos-modules && \
-    dnf -y install systemd-ukify sbsigntools uki-direct && \
+# 3. Swap Atomico del Kernel (Metodo uBlue/Bypass DNF)
+# Installiamo il nuovo kernel, poi forziamo la rimozione del vecchio tramite RPM 
+# bypassando l'albero delle dipendenze per salvare le policy SELinux.
+RUN dnf -y install kernel-cachyos systemd-ukify sbsigntools uki-direct && \
+    rpm -qa | grep -E '^kernel(-core|-modules|-modules-core|-modules-extra)?-[0-9]' | xargs rpm -e --nodeps && \
+    rm -rf /usr/lib/modules/*fc4* && \
     dnf clean all
 
 # 4. Configurazione UKI (systemd-ukify) 
