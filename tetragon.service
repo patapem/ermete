@@ -4,23 +4,21 @@ Documentation=https://tetragon.io/docs/
 After=network.target bpf_fs.mount
 Wants=bpf_fs.mount
 
-[Service]
+
 Type=simple
-ExecStart=/usr/local/bin/tetragon --bpf-lib=/usr/local/lib/tetragon/ --export-filename=/var/log/tetragon/tetragon.log
+ExecStart=/usr/local/bin/tetragon --bpf-lib=/usr/local/lib/tetragon/ --export-filename=/var/log/tetragon/tetragon.log --keep-sensors-on-exit
 Restart=on-failure
 RestartSec=5
-TimeoutStopSec=10
 
-# Systemd Hardening & Sandboxing
+# Sandboxing Ottimizzato
 ProtectSystem=strict
 ProtectHome=true
 PrivateTmp=true
-ProtectKernelTunables=false
-ProtectControlGroups=false
-RestrictSUIDSGID=true
-NoNewPrivileges=false
-RuntimeDirectory=tetragon
-ReadWritePaths=/var/log/tetragon/ /sys/fs/bpf/ /var/run/tetragon/ /run/tetragon/
+ProtectKernelTunables=yes
+ProtectControlGroups=yes
+BindPaths=/sys/fs/bpf
+CapabilityBoundingSet=CAP_BPF CAP_PERFMON CAP_NET_ADMIN CAP_SYS_RESOURCE CAP_SYS_PTRACE
+ReadWritePaths=/var/log/tetragon/ /var/run/tetragon/ /run/tetragon/
 
 [Install]
 WantedBy=multi-user.target
