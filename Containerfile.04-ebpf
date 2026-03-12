@@ -2,7 +2,7 @@
 FROM localhost/gui:latest AS ebpf
 
 # 1. Installazione bpftop
-RUN dnf -y install bpftop && dnf clean all [cite: 13]
+RUN dnf -y install bpftop && dnf clean all 
 
 # 2. Installazione Cilium Tetragon via tarball ufficiale
 # Abbiamo reso l'estrazione più esplicita per evitare errori di pathing
@@ -18,14 +18,14 @@ RUN curl -fsSL -O https://github.com/cilium/tetragon/releases/download/v${TETRAG
     # Installazione oggetti eBPF (.o)
     cp tetragon-v${TETRAGON_VERSION}-amd64/usr/local/lib/tetragon/*.o /usr/local/lib/tetragon/ && \
     # Pulizia
-    rm -rf tetragon-v${TETRAGON_VERSION}-amd64* [cite: 13, 14, 15, 16]
+    rm -rf tetragon-v${TETRAGON_VERSION}-amd64* 
 
 # 3. Definizione del servizio Systemd
 # Assicurati di caricare il file tetragon.service aggiornato che abbiamo discusso
-COPY tetragon.service /usr/lib/systemd/system/tetragon.service [cite: 18]
+COPY tetragon.service /usr/lib/systemd/system/tetragon.service
 
 # 4. Attivazione dichiarativa del demone Tetragon
-RUN systemctl enable tetragon.service [cite: 13]
+RUN systemctl enable tetragon.service
 
 # ---------------------------------------------------------------------
 # PATCH CRITICA SELINUX: Pre-compilazione Assoluta della Policy
@@ -34,7 +34,7 @@ RUN systemctl enable tetragon.service [cite: 13]
 # da Fedora 41 (con kernel differente) non rompa i contesti di sicurezza.
 RUN dnf -y install policycoreutils selinux-policy-targeted && \
     /usr/sbin/semodule -B && \
-    dnf clean all [cite: 17]
+    dnf clean all
 
 # 5. Validazione finale e garbage collection
-RUN bootc container lint [cite: 13]
+RUN bootc container lint
