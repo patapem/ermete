@@ -7,12 +7,12 @@ RUN echo -e "[copr:copr.fedorainfracloud.org:bieszczaders:kernel-cachyos]\nname=
 RUN mkdir -p /usr/lib/kernel && \
     echo "layout=ostree" > /usr/lib/kernel/install.conf
 
-# 3. Swap Atomico del Kernel (Metodo uBlue/Bypass DNF)
-# Installiamo il nuovo kernel, poi forziamo la rimozione del vecchio tramite RPM 
-# bypassando l'albero delle dipendenze per salvare le policy SELinux.
-RUN dnf -y install kernel-cachyos systemd-ukify sbsigntools uki-direct && \
-    rpm -qa | grep -E '^kernel(-core|-modules|-modules-core|-modules-extra)?-[0-9]' | xargs rpm -e --nodeps && \
-    rm -rf /usr/lib/modules/*fc4* && \
+# 3. Sostituzione Atomica del Kernel e Ripristino Policy SELinux
+# Rimuoviamo il kernel stock, svuotiamo la cartella prima di installare il nuovo,
+# e reinstalliamo contestualmente le policy di sicurezza eliminate da DNF.
+RUN dnf -y remove kernel kernel-core kernel-modules kernel-modules-core kernel-modules-extra || true && \
+    rm -rf /usr/lib/modules/* && \
+    dnf -y install kernel-cachyos systemd-ukify sbsigntools uki-direct selinux-policy-targeted policycoreutils && \
     dnf clean all
 
 # 4. Configurazione UKI (systemd-ukify) 
