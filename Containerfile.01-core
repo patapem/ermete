@@ -59,3 +59,10 @@ RUN sed -i 's/^SELINUX=.*/SELINUX=enforcing/' /etc/selinux/config
 # Istruisce ostree/podman a cercare e pretendere gli allegati crittografici (firme) sul registry
 RUN mkdir -p /etc/containers/registries.d && \
     echo -e "docker:\n  ghcr.io/patapem/ermete:\n    use-sigstore-attachments: true" > /etc/containers/registries.d/ermete.yaml
+
+# 9. Creazione Utente Amministratore di Default
+# Creiamo l'utente 'ermete', lo aggiungiamo al gruppo 'wheel' (sudo) 
+# e impostiamo una password di test.
+RUN useradd -m -G wheel -s /bin/bash ermete && \
+    echo "ermete:password" | chpasswd && \
+    echo "root:password" | chpasswd
