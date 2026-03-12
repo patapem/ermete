@@ -1,26 +1,24 @@
-FROM localhost/gui:latest AS ebpf
+FROM localhost/core:latest AS hardware
 
-# 1. Installazione bpftop
-RUN dnf -y install bpftop && dnf clean all
+# 1. Configurazione del repository COPR per linux-cachyos
+RUN echo -e "[copr:copr.fedorainfracloud.org:bieszczaders:kernel-cachyos]\nname=Copr repo for kernel-cachyos owned by bieszczaders\nbaseurl=https://download.copr.fedorainfracloud.org/results/bieszczaders/kernel-cachyos/fedora-\$releasever-\$basearch/\ntype=rpm-md\nskip_if_unavailable=True\ngpgcheck=1\ngpgkey=https://download.copr.fedorainfracloud.org/results/bieszczaders/kernel-cachyos/pubkey.gpg\nrepo_gpgcheck=0\nenabled=1\nenabled_metadata=1" > /etc/yum.repos.d/cachyos.repo
 
-# 2. Installazione Cilium Tetragon via tarball ufficiale
-ENV TETRAGON_VERSION=1.6.0
-RUN curl -fsSL -O https://github.com/cilium/tetragon/releases/download/v${TETRAGON_VERSION}/tetragon-v${TETRAGON_VERSION}-amd64.tar.gz && \
-    curl -fsSL -O https://github.com/cilium/tetragon/releases/download/v${TETRAGON_VERSION}/tetragon-v${TETRAGON_VERSION}-amd64.tar.gz.sha256sum && \
-    sha256sum -c tetragon-v${TETRAGON_VERSION}-amd64.tar.gz.sha256sum && \
-    mkdir -p /tmp/tetragon-release /usr/local/lib/tetragon /usr/local/bin && \
-    tar -xzf tetragon-v${TETRAGON_VERSION}-amd64.tar.gz -C /tmp/tetragon-release && \
-    find /tmp/tetragon-release -type f -name "tetragon" -exec cp {} /usr/local/bin/ \; && \
-    find /tmp/tetragon-release -type f -name "tetra" -exec cp {} /usr/local/bin/ \; && \
-    find /tmp/tetragon-release -type f -name "*.o" -exec cp {} /usr/local/lib/tetragon/ \; && \
-    rm -rf /tmp/tetragon-release tetragon-v${TETRAGON_VERSION}-amd64*
+# 2. Iniezione direttive layout per rpm-ostree / bootc
+RUN mkdir -p /usr/lib/kernel && \
+    echo "layout=ostree" > /usr/lib/kernel/install.conf
 
-# 3. Definizione del servizio Systemd
-COPY tetragon.service /usr/lib/systemd/system/tetragon.service
+# 3. Sostituzione Atomica del Kernel e Ripristino Policy SELinux
+# Rimuoviamo il kernel stock, svuotiamo la cartella prima di installare il nuovo,
+# e reinstalliamo contestualmente le policy di sicurezza eliminate da DNF.
+RUN dnf -y remove kernel kernel-core kernel-modules kernel-modules-core kernel-modules-extra || true && \
+    rm -rf /usr/lib/modules/* && \
+    dnf -y install kernel-cachyos systemd-ukify sbsigntools uki-direct selinux-policy-targeted policycoreutils && \
+    dnf clean all
 
-# 4. Attivazione dichiarativa del demone Tetragon
-RUN mkdir -p /var/log/tetragon && \
-    systemctl enable tetragon.service
+# 4. Configurazione UKI (systemd-ukify) 
+COPY uki.conf /etc/kernel/uki.conf
 
-# 5. Validazione finale e garbage collection
-RUN bootc container lint
+# 5. Organizzazione strutturale UKI per bootc
+RUN KVER=$(ls /usr/lib/modules/ | head -n 1) && \
+    mkdir -p /usr/lib/modules/${KVER} && \
+    echo "Rigenerazione initramfs e firma UKI saranno delegate a bootc-image-builder durante il rendering dell'immagine bare-metal."
