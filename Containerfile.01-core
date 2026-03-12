@@ -1,4 +1,4 @@
-FROM quay.io/fedora/fedora-bootc:43 AS core
+FROM quay.io/fedora/fedora-bootc:41 AS core
 
 # 1. Purga del Machine-ID per il deployment agnostico
 RUN truncate -s 0 /etc/machine-id
