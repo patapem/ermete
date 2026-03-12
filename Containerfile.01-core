@@ -24,7 +24,7 @@ RUN mkdir -p /etc/containers/registries.d && \
     echo -e "docker:\n  ghcr.io/patapem/ermete:\n    use-sigstore-attachments: true" > /etc/containers/registries.d/ermete.yaml
 
 # 7. Sostituzione Kernel CachyOS e Hardening SELinux
-RUN dnf -y install dnf5-plugin-copr && \
+RUN dnf -y install 'dnf5-command(copr)' && \
     dnf -y copr enable bieszczaders/kernel-cachyos && \
     dnf -y install systemd-ukify sbsigntools uki-direct \
         kernel-cachyos \
