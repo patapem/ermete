@@ -23,8 +23,23 @@ RUN sed -i 's/^SELINUX=.*/SELINUX=enforcing/' /etc/selinux/config
 RUN mkdir -p /etc/containers/registries.d && \
     echo -e "docker:\n  ghcr.io/patapem/ermete:\n    use-sigstore-attachments: true" > /etc/containers/registries.d/ermete.yaml
 
-# 7. Provisioning Utente (Standard Enterprise: systemd-sysusers)
-# Creiamo il file di configurazione, lo applichiamo subito in build e poi impostiamo la password
+# 7. Sostituzione Kernel CachyOS e Hardening SELinux
+# Assicurati che il file .repo di CachyOS sia copiato in /etc/yum.repos.d/ prima di questo step
+# o che sia stato iniettato in un layer precedente.
+RUN dnf -y install systemd-ukify sbsigntools uki-direct \
+        kernel-cachyos \
+        kernel-cachyos-core \
+        kernel-cachyos-modules \
+        kernel-cachyos-modules-extra && \
+    dnf -y remove kernel \
+        kernel-core \
+        kernel-modules \
+        kernel-modules-core \
+        kernel-modules-extra && \
+    restorecon -Rv /usr/lib/modules/ && \
+    dnf clean all
+
+# 8. Provisioning Utente (Standard Enterprise: systemd-sysusers)
 RUN echo 'u ermete - "Ermete SysAdmin" /var/home/ermete /bin/bash' > /usr/lib/sysusers.d/ermete.conf && \
     echo 'm ermete wheel' >> /usr/lib/sysusers.d/ermete.conf && \
     systemd-sysusers && \
