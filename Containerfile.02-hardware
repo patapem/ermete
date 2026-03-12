@@ -1,30 +1,18 @@
 # Containerfile.02-hardware
 FROM localhost/core:latest AS hardware
 
-# 1. Configurazione del repository COPR per linux-cachyos
-RUN echo -e "[copr:copr.fedorainfracloud.org:bieszczaders:kernel-cachyos]\nname=Copr repo for kernel-cachyos owned by bieszczaders\nbaseurl=https://download.copr.fedorainfracloud.org/results/bieszczaders/kernel-cachyos/fedora-\$releasever-\$basearch/\ntype=rpm-md\nskip_if_unavailable=True\ngpgcheck=1\ngpgkey=https://download.copr.fedorainfracloud.org/results/bieszczaders/kernel-cachyos/pubkey.gpg\nrepo_gpgcheck=0\nenabled=1\nenabled_metadata=1" > /etc/yum.repos.d/cachyos.repo
-
-# 2. Iniezione direttive layout per rpm-ostree / bootc
+# 1. Iniezione direttive layout per rpm-ostree / bootc
 RUN mkdir -p /usr/lib/kernel && \
     echo "layout=ostree" > /usr/lib/kernel/install.conf
 
-# 3. Swap Chirurgico del Kernel (Bypass DB DNF & Pulizia Moduli)
-# FIX F43: Mock temporaneo di dracut per bypassare l'assenza di modules.dep nello scriptlet DNF
-RUN mv /usr/bin/dracut /usr/bin/dracut.bak && \
-    echo -e '#!/bin/bash\necho "Dracut execution bypassed during DNF transaction."\nexit 0' > /usr/bin/dracut && \
-    chmod +x /usr/bin/dracut && \
-    dnf -y install kernel-cachyos systemd-ukify sbsigntools uki-direct && \
-    mv /usr/bin/dracut.bak /usr/bin/dracut && \
-    rpm -qa | grep -E '^kernel(-core|-modules|-modules-core|-modules-extra)?-' | grep -v cachyos | xargs -r rpm -e --nodeps && \
-    find /usr/lib/modules -mindepth 1 -maxdepth 1 -type d ! -name "*cachyos*" -exec rm -rf {} + && \
-    dnf clean all [cite: 8, 9, 10]
+# 2. Installazione toolchain per UKI e Secure Boot
+# Installiamo solo i tool necessari per generare l'UKI dal kernel stock di Fedora
+RUN dnf -y install systemd-ukify sbsigntools uki-direct && \
+    dnf clean all 
 
-# 4. Configurazione UKI (systemd-ukify) 
+# 3. Configurazione UKI (systemd-ukify) 
 COPY uki.conf /etc/kernel/uki.conf
 
-# 5. Organizzazione strutturale UKI per bootc e generazione Map Dipendenze
-# FIX F43: Generazione esplicita del file modules.dep
-RUN KVER=$(ls /usr/lib/modules/ | grep cachyos | head -n 1) && \
-    depmod -a ${KVER} && \
-    mkdir -p /usr/lib/modules/${KVER} && \
-    echo "Il kernel attivo è $KVER. Rigenerazione initramfs delegata."
+# 4. Validazione Strutturale Kernel
+RUN KVER=$(ls /usr/lib/modules/ | head -n 1) && \
+    echo "Il kernel attivo è $KVER (Fedora Stock). Generazione UKI delegata a uki-direct."
