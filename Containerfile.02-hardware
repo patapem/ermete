@@ -7,17 +7,18 @@ RUN echo -e "[copr:copr.fedorainfracloud.org:bieszczaders:kernel-cachyos]\nname=
 RUN mkdir -p /usr/lib/kernel && \
     echo "layout=ostree" > /usr/lib/kernel/install.conf
 
-# 3. Installazione Affiancata (Coexistence)
-# Installiamo CachyOS SENZA rimuovere il kernel stock.
-# OSTree sceglierà automaticamente la versione più alta al boot.
-# Nessun conflitto SELinux, nessuna rottura dell'initramfs.
+# 3. Swap Chirurgico del Kernel (Bypass DB DNF & Pulizia Moduli)
+# Installiamo CachyOS, estirpiamo il kernel stock bypassando le policy SELinux,
+# ed eliminiamo fisicamente solo le cartelle dei moduli che non sono di CachyOS.
 RUN dnf -y install kernel-cachyos systemd-ukify sbsigntools uki-direct && \
+    rpm -qa | grep -E '^kernel(-core|-modules|-modules-core|-modules-extra)?-' | grep -v cachyos | xargs -r rpm -e --nodeps && \
+    find /usr/lib/modules -mindepth 1 -maxdepth 1 -type d ! -name "*cachyos*" -exec rm -rf {} + && \
     dnf clean all
 
 # 4. Configurazione UKI (systemd-ukify) 
 COPY uki.conf /etc/kernel/uki.conf
 
 # 5. Organizzazione strutturale UKI per bootc
-RUN KVER=$(ls /usr/lib/modules/ | sort -V | tail -n 1) && \
+RUN KVER=$(ls /usr/lib/modules/ | head -n 1) && \
     mkdir -p /usr/lib/modules/${KVER} && \
-    echo "Il kernel attivo sarà $KVER. Rigenerazione initramfs delegata."
+    echo "Il kernel attivo è $KVER. Rigenerazione initramfs delegata."
