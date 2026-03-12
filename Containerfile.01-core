@@ -37,4 +37,4 @@ RUN mkdir -p /etc/containers/registries.d && \
 # e impostiamo una password di test.
 RUN useradd -m -G wheel -s /bin/bash ermete && \
     echo "ermete:password" | chpasswd && \
-    echo "root:password" | chpasswd
+    echo "root:password" | chpasswd 
