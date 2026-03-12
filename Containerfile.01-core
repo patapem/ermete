@@ -23,28 +23,22 @@ RUN sed -i 's/^SELINUX=.*/SELINUX=enforcing/' /etc/selinux/config
 RUN mkdir -p /etc/containers/registries.d && \
     echo -e "docker:\n  ghcr.io/patapem/ermete:\n    use-sigstore-attachments: true" > /etc/containers/registries.d/ermete.yaml
 
-# 7. Sostituzione Kernel CachyOS e Hardening SELinux
-RUN dnf -y install 'dnf5-command(copr)' && \
-    dnf -y copr enable bieszczaders/kernel-cachyos && \
-    mv /usr/bin/dracut /usr/bin/dracut.bak && \
-    echo '#!/bin/sh' > /usr/bin/dracut && \
-    echo 'exit 0' >> /usr/bin/dracut && \
-    chmod +x /usr/bin/dracut && \
-    dnf -y install systemd-ukify sbsigntools uki-direct \
-        kernel-cachyos \
-        kernel-cachyos-core \
-        kernel-cachyos-modules && \
-    mv /usr/bin/dracut.bak /usr/bin/dracut && \
-    KVER=$(ls /lib/modules | grep cachyos | head -n 1) && \
-    depmod -a $KVER && \
-    kernel-install add $KVER /lib/modules/$KVER/vmlinuz && \
-    dnf -y remove kernel \
-        kernel-core \
-        kernel-modules \
-        kernel-modules-core \
-        kernel-modules-extra && \
-    restorecon -Rv /usr/lib/modules/ && \
-    dnf clean all
+# 7. Sostituzione Kernel CachyOS (Metodo Ufficiale via Heredoc)
+RUN <<EOF
+set -xeuo pipefail
+dnf -y install 'dnf5-command(copr)'
+dnf -y copr enable bieszczaders/kernel-cachyos
+
+# Transazione DNF nativa passata in modo pulito senza virgolette
+dnf5 -y shell <<DNF_EOF
+remove kernel kernel-core kernel-modules kernel-modules-core kernel-modules-extra
+install kernel-cachyos kernel-cachyos-core kernel-cachyos-modules systemd-ukify sbsigntools uki-direct
+run
+DNF_EOF
+
+restorecon -Rv /usr/lib/modules/
+dnf clean all
+EOF
 
 # 8. Provisioning Utente (Standard Enterprise: systemd-sysusers)
 RUN echo 'u ermete - "Ermete SysAdmin" /var/home/ermete /bin/bash' > /usr/lib/sysusers.d/ermete.conf && \
