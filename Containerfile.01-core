@@ -1,4 +1,4 @@
-FROM quay.io/fedora/fedora-bootc:41 AS core
+FROM quay.io/fedora/fedora-bootc:43 AS core
 
 # 1. Purga del Machine-ID per il deployment agnostico
 RUN truncate -s 0 /etc/machine-id
@@ -24,7 +24,7 @@ RUN mkdir -p /etc/containers/registries.d && \
     echo -e "docker:\n  ghcr.io/patapem/ermete:\n    use-sigstore-attachments: true" > /etc/containers/registries.d/ermete.yaml
 
 # 7. Sostituzione Kernel CachyOS e Hardening SELinux
-RUN dnf -y install dnf-plugins-core && \
+RUN dnf -y install dnf5-plugin-copr && \
     dnf -y copr enable bieszczaders/kernel-cachyos && \
     dnf -y install systemd-ukify sbsigntools uki-direct \
         kernel-cachyos \
