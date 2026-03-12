@@ -26,11 +26,18 @@ RUN mkdir -p /etc/containers/registries.d && \
 # 7. Sostituzione Kernel CachyOS e Hardening SELinux
 RUN dnf -y install 'dnf5-command(copr)' && \
     dnf -y copr enable bieszczaders/kernel-cachyos && \
+    mv /usr/bin/dracut /usr/bin/dracut.bak && \
+    echo '#!/bin/sh' > /usr/bin/dracut && \
+    echo 'exit 0' >> /usr/bin/dracut && \
+    chmod +x /usr/bin/dracut && \
     dnf -y install systemd-ukify sbsigntools uki-direct \
         kernel-cachyos \
         kernel-cachyos-core \
-        kernel-cachyos-modules \
-        kernel-cachyos-modules-extra && \
+        kernel-cachyos-modules && \
+    mv /usr/bin/dracut.bak /usr/bin/dracut && \
+    KVER=$(ls /lib/modules | grep cachyos | head -n 1) && \
+    depmod -a $KVER && \
+    kernel-install add $KVER /lib/modules/$KVER/vmlinuz && \
     dnf -y remove kernel \
         kernel-core \
         kernel-modules \
