@@ -1,9 +1,11 @@
 name: Build and Push Fedora Atomic OS
 on:
   push:
-    branches: [ "main" ]
+    branches: 
+      - "main"
+      - "refactoring-enterprise" # <--- Aggiungi questa riga
   schedule:
-    - cron: '0 2 * * *' # Build notturna
+    - cron: '0 2 * * *'
 
 jobs:
   build-and-push:
