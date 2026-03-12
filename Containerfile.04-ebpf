@@ -14,7 +14,7 @@ RUN curl -fsSL -O https://github.com/cilium/tetragon/releases/download/v${TETRAG
     find /tmp/tetragon-release -type f -name "tetragon" -exec cp {} /usr/local/bin/ \; && \
     find /tmp/tetragon-release -type f -name "tetra" -exec cp {} /usr/local/bin/ \; && \
     find /tmp/tetragon-release -type f -name "*.o" -exec cp {} /usr/local/lib/tetragon/ \; && \
-    rm -rf /tmp/tetragon-release tetragon-v${TETRAGON_VERSION}-amd64* 
+    rm -rf /tmp/tetragon-release tetragon-v${TETRAGON_VERSION}-amd64*
 
 # 3. Definizione del servizio Systemd
 COPY tetragon.service /usr/lib/systemd/system/tetragon.service
@@ -30,7 +30,7 @@ RUN mkdir -p /var/log/tetragon && \
 # compilazione della policy SELinux direttamente dentro il container.
 RUN dnf -y install policycoreutils selinux-policy-targeted && \
     /usr/sbin/semodule -B && \
-    dnf clean all 
+    dnf clean all
 
 # 5. Validazione finale e garbage collection
 RUN bootc container lint
