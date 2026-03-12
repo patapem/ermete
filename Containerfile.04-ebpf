@@ -22,13 +22,5 @@ COPY tetragon.service /usr/lib/systemd/system/tetragon.service
 RUN mkdir -p /var/log/tetragon && \
     systemctl enable tetragon.service
 
-# ---------------------------------------------------------------------
-# PATCH CRITICA SELINUX: Forzare l'installazione nel layer finale
-# ---------------------------------------------------------------------
-# Assicuriamoci che i tool necessari per ostree-finalize-staged esistano 
-# nell'immagine finale, aggirando eventuali rimozioni nei layer intermedi.
-RUN dnf -y install policycoreutils selinux-policy-targeted && \
-    dnf clean all
-
 # 5. Validazione finale e garbage collection
 RUN bootc container lint
