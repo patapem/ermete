@@ -22,5 +22,14 @@ COPY tetragon.service /usr/lib/systemd/system/tetragon.service
 RUN mkdir -p /var/log/tetragon && \
     systemctl enable tetragon.service
 
+# ---------------------------------------------------------------------
+# PATCH CRITICA SELINUX: Pre-compilazione Assoluta della Policy
+# ---------------------------------------------------------------------
+# Bypassiamo il bug di ostree/bwrap sul client Kinoite forzando la 
+# compilazione della policy SELinux direttamente dentro il container.
+RUN dnf -y install policycoreutils selinux-policy-targeted && \
+    /usr/sbin/semodule -B && \
+    dnf clean all
+
 # 5. Validazione finale e garbage collection
 RUN bootc container lint
