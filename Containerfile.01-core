@@ -24,9 +24,9 @@ RUN mkdir -p /etc/containers/registries.d && \
     echo -e "docker:\n  ghcr.io/patapem/ermete:\n    use-sigstore-attachments: true" > /etc/containers/registries.d/ermete.yaml
 
 # 7. Provisioning Utente (Standard Enterprise: systemd-sysusers)
-# Definiamo l'utente senza toccare direttamente /etc/passwd in build
+# Creiamo il file di configurazione, lo applichiamo subito in build e poi impostiamo la password
 RUN echo 'u ermete - "Ermete SysAdmin" /var/home/ermete /bin/bash' > /usr/lib/sysusers.d/ermete.conf && \
-    echo 'm ermete wheel' >> /usr/lib/sysusers.d/ermete.conf
-
-# NB: Password temporanea (In produzione usare Ignition)
-RUN echo "ermete:password" | chpasswd && echo "root:password" | chpasswd
+    echo 'm ermete wheel' >> /usr/lib/sysusers.d/ermete.conf && \
+    systemd-sysusers && \
+    echo "ermete:password" | chpasswd && \
+    echo "root:password" | chpasswd
