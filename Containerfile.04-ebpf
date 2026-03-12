@@ -2,36 +2,31 @@
 FROM localhost/gui:latest AS ebpf
 
 # 1. Installazione bpftop
-RUN dnf -y install bpftop && dnf clean all 
+RUN dnf -y install bpftop && dnf clean all
 
 # 2. Installazione Cilium Tetragon via tarball ufficiale
-# Abbiamo reso l'estrazione più esplicita per evitare errori di pathing
 ENV TETRAGON_VERSION=1.6.0
 RUN curl -fsSL -O https://github.com/cilium/tetragon/releases/download/v${TETRAGON_VERSION}/tetragon-v${TETRAGON_VERSION}-amd64.tar.gz && \
     curl -fsSL -O https://github.com/cilium/tetragon/releases/download/v${TETRAGON_VERSION}/tetragon-v${TETRAGON_VERSION}-amd64.tar.gz.sha256sum && \
     sha256sum -c tetragon-v${TETRAGON_VERSION}-amd64.tar.gz.sha256sum && \
     mkdir -p /usr/local/lib/tetragon /usr/local/bin /var/log/tetragon && \
-    tar -xzf tetragon-v${TETRAGON_VERSION}-amd64.tar.gz && \
-    # Installazione binari con permessi espliciti
-    install -m 755 tetragon-v${TETRAGON_VERSION}-amd64/usr/local/bin/tetragon /usr/local/bin/ && \
-    install -m 755 tetragon-v${TETRAGON_VERSION}-amd64/usr/local/bin/tetra /usr/local/bin/ && \
-    # Installazione oggetti eBPF (.o)
-    cp tetragon-v${TETRAGON_VERSION}-amd64/usr/local/lib/tetragon/*.o /usr/local/lib/tetragon/ && \
+    mkdir -p /tmp/tetragon-unpack && \
+    tar -xzf tetragon-v${TETRAGON_VERSION}-amd64.tar.gz -C /tmp/tetragon-unpack && \
+    # Ricerca ricorsiva per gestire strutture di cartelle variabili nel tarball
+    find /tmp/tetragon-unpack -type f -name "tetragon" -exec install -m 755 {} /usr/local/bin/ \; && \
+    find /tmp/tetragon-unpack -type f -name "tetra" -exec install -m 755 {} /usr/local/bin/ \; && \
+    find /tmp/tetragon-unpack -type f -name "*.o" -exec cp {} /usr/local/lib/tetragon/ \; && \
     # Pulizia
-    rm -rf tetragon-v${TETRAGON_VERSION}-amd64* 
+    rm -rf /tmp/tetragon-unpack tetragon-v${TETRAGON_VERSION}-amd64*
 
 # 3. Definizione del servizio Systemd
-# Assicurati di caricare il file tetragon.service aggiornato che abbiamo discusso
 COPY tetragon.service /usr/lib/systemd/system/tetragon.service
 
 # 4. Attivazione dichiarativa del demone Tetragon
 RUN systemctl enable tetragon.service
-
 # ---------------------------------------------------------------------
 # PATCH CRITICA SELINUX: Pre-compilazione Assoluta della Policy
 # ---------------------------------------------------------------------
-# Questa fase è vitale per Fedora 43 per garantire che il passaggio
-# da Fedora 41 (con kernel differente) non rompa i contesti di sicurezza.
 RUN dnf -y install policycoreutils selinux-policy-targeted && \
     /usr/sbin/semodule -B && \
     dnf clean all
