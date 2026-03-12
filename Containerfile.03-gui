@@ -1,3 +1,4 @@
+# Containerfile.03-gui
 FROM localhost/hardware:latest AS gui
 
 # 1. Installazione dell'ambiente desktop Wayland con fallback legacy
