@@ -23,22 +23,14 @@ RUN sed -i 's/^SELINUX=.*/SELINUX=enforcing/' /etc/selinux/config
 RUN mkdir -p /etc/containers/registries.d && \
     echo -e "docker:\n  ghcr.io/patapem/ermete:\n    use-sigstore-attachments: true" > /etc/containers/registries.d/ermete.yaml
 
-# 7. Sostituzione Kernel CachyOS (Metodo Ufficiale via Heredoc)
-RUN <<EOF
-set -xeuo pipefail
-dnf -y install 'dnf5-command(copr)'
-dnf -y copr enable bieszczaders/kernel-cachyos
-
-# Transazione DNF nativa passata in modo pulito senza virgolette
-dnf5 -y shell <<DNF_EOF
-remove kernel kernel-core kernel-modules kernel-modules-core kernel-modules-extra
-install kernel-cachyos kernel-cachyos-core kernel-cachyos-modules systemd-ukify sbsigntools uki-direct
-run
-DNF_EOF
-
-restorecon -Rv /usr/lib/modules/
-dnf clean all
-EOF
+# 7. Sostituzione Kernel CachyOS (Metodo Ufficiale via pipeline)
+RUN dnf -y install 'dnf5-command(copr)' && \
+    dnf -y copr enable bieszczaders/kernel-cachyos && \
+    (echo 'remove kernel kernel-core kernel-modules kernel-modules-core kernel-modules-extra'; \
+     echo 'install kernel-cachyos kernel-cachyos-core kernel-cachyos-modules systemd-ukify sbsigntools uki-direct'; \
+     echo 'run') | dnf5 -y shell && \
+    restorecon -Rv /usr/lib/modules/ && \
+    dnf clean all
 
 # 8. Provisioning Utente (Standard Enterprise: systemd-sysusers)
 RUN echo 'u ermete - "Ermete SysAdmin" /var/home/ermete /bin/bash' > /usr/lib/sysusers.d/ermete.conf && \
