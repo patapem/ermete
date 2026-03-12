@@ -1,24 +1,36 @@
+# Containerfile.04-ebpf
 FROM localhost/gui:latest AS ebpf
 
+# 1. Installazione bpftop
 RUN dnf -y install bpftop && dnf clean all
 
-# 1. Installazione Tetragon (Official Binaries)
+# 2. Installazione Cilium Tetragon via tarball ufficiale
 ENV TETRAGON_VERSION=1.6.0
 RUN curl -fsSL -O https://github.com/cilium/tetragon/releases/download/v${TETRAGON_VERSION}/tetragon-v${TETRAGON_VERSION}-amd64.tar.gz && \
-    tar -xzf tetragon-v${TETRAGON_VERSION}-amd64.tar.gz -C /tmp && \
-    cp /tmp/tetragon-v${TETRAGON_VERSION}-amd64/tetragon /usr/local/bin/ && \
-    cp /tmp/tetragon-v${TETRAGON_VERSION}-amd64/tetra /usr/local/bin/ && \
-    mkdir -p /usr/local/lib/tetragon && \
-    cp /tmp/tetragon-v${TETRAGON_VERSION}-amd64/*.o /usr/local/lib/tetragon/ && \
-    rm -rf /tmp/tetragon-*
+    curl -fsSL -O https://github.com/cilium/tetragon/releases/download/v${TETRAGON_VERSION}/tetragon-v${TETRAGON_VERSION}-amd64.tar.gz.sha256sum && \
+    sha256sum -c tetragon-v${TETRAGON_VERSION}-amd64.tar.gz.sha256sum && \
+    mkdir -p /tmp/tetragon-release /usr/local/lib/tetragon /usr/local/bin && \
+    tar -xzf tetragon-v${TETRAGON_VERSION}-amd64.tar.gz -C /tmp/tetragon-release && \
+    find /tmp/tetragon-release -type f -name "tetragon" -exec cp {} /usr/local/bin/ \; && \
+    find /tmp/tetragon-release -type f -name "tetra" -exec cp {} /usr/local/bin/ \; && \
+    find /tmp/tetragon-release -type f -name "*.o" -exec cp {} /usr/local/lib/tetragon/ \; && \
+    rm -rf /tmp/tetragon-release tetragon-v${TETRAGON_VERSION}-amd64* 
 
+# 3. Definizione del servizio Systemd
 COPY tetragon.service /usr/lib/systemd/system/tetragon.service
-RUN mkdir -p /var/log/tetragon && systemctl enable tetragon.service
 
-# 2. Iniezione Modulo SELinux Personalizzato (Sostituisce semodule -B)
-# Crea un file tetragon.cil vuoto o con policy prima di compilare
-COPY tetragon.cil /tmp/tetragon.cil
-RUN semodule -X 300 -i /tmp/tetragon.cil && rm /tmp/tetragon.cil
+# 4. Attivazione dichiarativa del demone Tetragon
+RUN mkdir -p /var/log/tetragon && \
+    systemctl enable tetragon.service
 
-# 3. Validazione Finale
+# ---------------------------------------------------------------------
+# PATCH CRITICA SELINUX: Pre-compilazione Assoluta della Policy
+# ---------------------------------------------------------------------
+# Bypassiamo il bug di ostree/bwrap sul client Kinoite forzando la 
+# compilazione della policy SELinux direttamente dentro il container.
+RUN dnf -y install policycoreutils selinux-policy-targeted && \
+    /usr/sbin/semodule -B && \
+    dnf clean all 
+
+# 5. Validazione finale e garbage collection
 RUN bootc container lint
