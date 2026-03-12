@@ -1,5 +1,5 @@
 # Containerfile.02-hardware
-FROM localhost/core:latest AS hardware [cite: 7]
+FROM localhost/core:latest AS hardware
 
 # 1. Configurazione del repository COPR per linux-cachyos
 RUN echo -e "[copr:copr.fedorainfracloud.org:bieszczaders:kernel-cachyos]\nname=Copr repo for kernel-cachyos owned by bieszczaders\nbaseurl=https://download.copr.fedorainfracloud.org/results/bieszczaders/kernel-cachyos/fedora-\$releasever-\$basearch/\ntype=rpm-md\nskip_if_unavailable=True\ngpgcheck=1\ngpgkey=https://download.copr.fedorainfracloud.org/results/bieszczaders/kernel-cachyos/pubkey.gpg\nrepo_gpgcheck=0\nenabled=1\nenabled_metadata=1" > /etc/yum.repos.d/cachyos.repo
