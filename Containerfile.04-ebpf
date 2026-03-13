@@ -27,11 +27,11 @@ RUN systemctl enable tetragon.service
 # PATCH CRITICA SELINUX: Compilazione Policy e Labeling Binario
 # ---------------------------------------------------------------------
 RUN dnf -y install policycoreutils selinux-policy-targeted && \
-    # Compilazione del modulo base
+    # Compilazione del modulo base (il warning su cross-device link è normale nel container)
     /usr/sbin/semodule -B && \
-    # Assegnazione esplicita del dominio eseguibile (bin_t)
-    chcon -t bin_t /usr/local/bin/tetragon && \
-    chcon -t bin_t /usr/local/bin/tetra && \
+    # Applicazione del contesto SELinux assoluto per file "unlabeled"
+    chcon system_u:object_r:bin_t:s0 /usr/local/bin/tetragon && \
+    chcon system_u:object_r:bin_t:s0 /usr/local/bin/tetra && \
     dnf clean all
 
 # 5. Validazione finale e garbage collection
