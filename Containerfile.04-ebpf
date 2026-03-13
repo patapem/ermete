@@ -4,19 +4,21 @@ FROM localhost/gui:latest AS ebpf
 # 1. Installazione bpftop
 RUN dnf -y install bpftop && dnf clean all
 
-# 2. Installazione Cilium Tetragon via tarball ufficiale
+# 2. Installazione Cilium Tetragon (Estrazione strutturata e sicura)
 ENV TETRAGON_VERSION=1.6.0
 RUN curl -fsSL -O https://github.com/cilium/tetragon/releases/download/v${TETRAGON_VERSION}/tetragon-v${TETRAGON_VERSION}-amd64.tar.gz && \
     curl -fsSL -O https://github.com/cilium/tetragon/releases/download/v${TETRAGON_VERSION}/tetragon-v${TETRAGON_VERSION}-amd64.tar.gz.sha256sum && \
     sha256sum -c tetragon-v${TETRAGON_VERSION}-amd64.tar.gz.sha256sum && \
-    mkdir -p /usr/local/lib/tetragon /usr/local/bin /var/log/tetragon && \
-    mkdir -p /tmp/tetragon-unpack && \
-    tar -xzf tetragon-v${TETRAGON_VERSION}-amd64.tar.gz -C /tmp/tetragon-unpack && \
-    # Ricerca ricorsiva per gestire strutture di cartelle variabili nel tarball
-    find /tmp/tetragon-unpack -type f -name "tetragon" -exec install -m 755 {} /usr/local/bin/ \; && \
-    find /tmp/tetragon-unpack -type f -name "tetra" -exec install -m 755 {} /usr/local/bin/ \; && \
-    find /tmp/tetragon-unpack -type f -name "*.o" -exec cp {} /usr/local/lib/tetragon/ \; && \
-    # Pulizia
+    # Creazione preventiva delle directory target
+    mkdir -p /usr/local/bin /usr/local/lib/tetragon /var/log/tetragon /tmp/tetragon-unpack && \
+    # Estrazione con rimozione della directory radice del tarball
+    tar -xzf tetragon-v${TETRAGON_VERSION}-amd64.tar.gz -C /tmp/tetragon-unpack --strip-components=1 && \
+    # Spostamento mirato dei binari
+    mv /tmp/tetragon-unpack/tetragon /usr/local/bin/tetragon && \
+    mv /tmp/tetragon-unpack/tetra /usr/local/bin/tetra && \
+    # Spostamento in blocco delle sonde eBPF precompilate
+    mv /tmp/tetragon-unpack/bpf/* /usr/local/lib/tetragon/ && \
+    # Pulizia rigorosa
     rm -rf /tmp/tetragon-unpack tetragon-v${TETRAGON_VERSION}-amd64*
 
 # 3. Definizione del servizio Systemd
@@ -24,11 +26,16 @@ COPY tetragon.service /usr/lib/systemd/system/tetragon.service
 
 # 4. Attivazione dichiarativa del demone Tetragon
 RUN systemctl enable tetragon.service
+
 # ---------------------------------------------------------------------
-# PATCH CRITICA SELINUX: Pre-compilazione Assoluta della Policy
+# PATCH CRITICA SELINUX: Compilazione Policy e Labeling Binario
 # ---------------------------------------------------------------------
 RUN dnf -y install policycoreutils selinux-policy-targeted && \
+    # Compilazione del modulo base per assicurare che le definizioni esistano
     /usr/sbin/semodule -B && \
+    # Assegnazione esplicita del dominio eseguibile (bin_t) per prevenire AVC denials al boot
+    chcon -t bin_t /usr/local/bin/tetragon && \
+    chcon -t bin_t /usr/local/bin/tetra && \
     dnf clean all
 
 # 5. Validazione finale e garbage collection
