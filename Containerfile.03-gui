@@ -52,7 +52,6 @@ RUN dnf -y install \
     p7zip-plugins \
     unar \
     lzop \
-    lrzip \
     # Riproduzione Media Minimalista (KISS)
     mpv \
     # Strumenti di Sistema Essenziali
