@@ -26,7 +26,7 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # Compilazione Sequenziale dei Layer (Spazi corretti prima del punto)
+      # Compilazione Sequenziale dei Layer
       - name: Build Layer 01 (Core)
         run: podman build -t localhost/ermete-01-core:latest -f Containerfile.01-core.
       - name: Build Layer 02 (Hardware)
