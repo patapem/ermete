@@ -17,6 +17,8 @@ RUN dnf -y install \
 # 2. Strumenti di Produttività
 RUN dnf -y install \
     flatpak \
+    plasma-discover \
+    plasma-discover-flatpak \
     distrobox \
     podman \
     && dnf clean all
