@@ -7,9 +7,9 @@ ENV TETRAGON_VERSION=1.6.0
 RUN curl -LO https://github.com/cilium/tetragon/releases/download/v${TETRAGON_VERSION}/tetragon-v${TETRAGON_VERSION}-amd64.tar.gz && \
     tar -xzf tetragon-v${TETRAGON_VERSION}-amd64.tar.gz && \
     cd tetragon-v${TETRAGON_VERSION}-amd64 && \
-    # 2. Allineamento fisico delle directory del tarball per Bootc
-    mv usr/local/* usr/ && \
-    rmdir usr/local && \
+    # 2. Fusione sicura delle directory del tarball per Bootc (Merge al posto di Move)
+    cp -a usr/local/* usr/ && \
+    rm -rf usr/local && \
     # 3. Adattamento dei path all'interno dello script ufficiale
     sed -i 's|/usr/local|/usr|g' install.sh && \
     # 4. Esecuzione dell'installazione ufficiale
