@@ -9,8 +9,7 @@ Type=simple
 ExecStartPre=+/usr/sbin/restorecon -v /usr/bin/tetragon /usr/bin/tetra
 ExecStart=/usr/bin/tetragon --bpf-lib=/usr/lib/tetragon/ --export-filename=/var/log/tetragon/tetragon.log
 Restart=on-failure
-RestartSec=4
-
+RestartSec=5
 LogsDirectory=tetragon
 RuntimeDirectory=tetragon
 
