@@ -26,15 +26,33 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # Compilazione Sequenziale dei Layer
       - name: Build Layer 01 (Core)
-        run: podman build -t localhost/ermete-01-core:latest -f Containerfile.01-core.
+        run: |
+          podman build \
+            --tag localhost/ermete-01-core:latest \
+            --file Containerfile.01-core \
+           .
+
       - name: Build Layer 02 (Hardware)
-        run: podman build -t localhost/ermete-02-hardware:latest -f Containerfile.02-hardware.
+        run: |
+          podman build \
+            --tag localhost/ermete-02-hardware:latest \
+            --file Containerfile.02-hardware \
+           .
+
       - name: Build Layer 03 (GUI)
-        run: podman build -t localhost/ermete-03-gui:latest -f Containerfile.03-gui.
+        run: |
+          podman build \
+            --tag localhost/ermete-03-gui:latest \
+            --file Containerfile.03-gui \
+           .
+
       - name: Build Layer 04 (eBPF - Unsigned Base)
-        run: podman build -t localhost/ermete-04-ebpf-unsigned:latest -f Containerfile.04-ebpf.
+        run: |
+          podman build \
+            --tag localhost/ermete-04-ebpf-unsigned:latest \
+            --file Containerfile.04-ebpf \
+           .
 
       - name: Extract Kernel, Stub and Generate Universal Initramfs
         run: |
@@ -44,14 +62,13 @@ jobs:
           KVER=$(podman run --rm localhost/ermete-04-ebpf-unsigned:latest ls -1 /usr/lib/modules/ | grep -v "dracut" | head -n 1)
           echo "Rilevata versione kernel: $KVER"
           
-          # L'initramfs è generato calcolando l'impronta finale del layer 4.
           podman run --rm --privileged \
             -v $(pwd)/build-uki:/out localhost/ermete-04-ebpf-unsigned:latest \
             dracut --nomdadmconf --nolvmconf --no-hostonly -f /out/initramfs.img ${KVER}
             
           podman cp ${CONTAINER_ID}:/usr/lib/modules/${KVER}/vmlinuz build-uki/vmlinuz
           podman cp ${CONTAINER_ID}:/usr/lib/systemd/boot/efi/linuxx64.efi.stub build-uki/linuxx64.efi.stub
-          podman rm ${CONTAINER_ID}
+          podman rm -f ${CONTAINER_ID}
 
       - name: Assemble Unified Kernel Image (UKIFY)
         run: |
@@ -86,10 +103,14 @@ jobs:
 
       - name: Create Final Signed OCI Image
         run: |
-          cat <<EOF > Containerfile.final
+          cat << 'EOF' > Containerfile.final
           FROM localhost/ermete-04-ebpf-unsigned:latest
-          COPY./build-uki/vmlinuz-ermete.efi /usr/lib/modules/vmlinuz-ermete.efi
+          COPY build-uki/vmlinuz-ermete.efi /usr/lib/modules/vmlinuz-ermete.efi
           EOF
           
-          podman build -t ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest -f Containerfile.final.
+          podman build \
+            --tag ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest \
+            --file Containerfile.final \
+           .
+            
           podman push ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
