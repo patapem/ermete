@@ -7,17 +7,18 @@ ENV TETRAGON_VERSION=1.6.0
 RUN curl -LO https://github.com/cilium/tetragon/releases/download/v${TETRAGON_VERSION}/tetragon-v${TETRAGON_VERSION}-amd64.tar.gz && \
     tar -xzf tetragon-v${TETRAGON_VERSION}-amd64.tar.gz && \
     cd tetragon-v${TETRAGON_VERSION}-amd64 && \
-    # 2. Fusione sicura delle directory del tarball per Bootc (Merge al posto di Move)
+    # 2. Fusione sicura delle directory del tarball per Bootc
     cp -a usr/local/* usr/ && \
     rm -rf usr/local && \
-    # 3. Adattamento dei path all'interno dello script ufficiale
+    # 3. Adattamento dei path e bypass di systemctl per ambiente di build
     sed -i 's|/usr/local|/usr|g' install.sh && \
+    sed -i 's|systemctl|true|g' install.sh && \
     # 4. Esecuzione dell'installazione ufficiale
     ./install.sh && \
     cd .. && \
     rm -rf tetragon-v${TETRAGON_VERSION}-amd64*
 
-# 5. Attivazione del demone
+# 5. Attivazione del demone (modalità offline dichiarativa per bootc)
 RUN systemctl enable tetragon.service
 
 # 6. Validazione OSTree
