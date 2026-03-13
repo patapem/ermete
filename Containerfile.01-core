@@ -18,7 +18,8 @@ COPY zram-generator.conf /etc/systemd/zram-generator.conf
 COPY 99-hardening-performance.conf /etc/sysctl.d/99-hardening-performance.conf
 
 # 5. Configurazione Firewall Dichiarativo (Nftables)
-COPY nftables.conf /etc/nftables.conf
+# Percorso corretto per Fedora: il servizio cerca la config in /etc/sysconfig/
+COPY nftables.conf /etc/sysconfig/nftables.conf
 
 # 6. Attivazione dichiarativa dei servizi Systemd in fase di build
 RUN systemctl enable nftables.service && \
