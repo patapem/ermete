@@ -1,17 +1,25 @@
+# tetragon.service
+[Unit]
+Description=Tetragon eBPF Security Observability & Enforcement
+After=network.target bpf_fs.mount
+Wants=bpf_fs.mount
+
 [Service]
 Type=simple
 ExecStart=/usr/local/bin/tetragon --bpf-lib=/usr/local/lib/tetragon/ --export-filename=/var/log/tetragon/tetragon.log
 Restart=on-failure
 RestartSec=5
 
-# Ottimizzazioni per Fedora 43
+# Hardening ottimizzato per Fedora 43
 ProtectSystem=full
 ProtectHome=true
 PrivateTmp=true
-# Disabilitiamo queste direttive per permettere il caricamento dei programmi eBPF
 ProtectKernelTunables=false
 ProtectControlGroups=false
-# Permette a Tetragon di gestire i propri mount e namespace
+RestrictNamespaces=no
 MountFlags=shared
 RuntimeDirectory=tetragon
 ReadWritePaths=/var/log/tetragon/ /sys/fs/bpf/
+
+[Install]
+WantedBy=multi-user.target
