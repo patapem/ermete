@@ -4,14 +4,20 @@ FROM localhost/gui:latest AS ebpf
 # 1. Installazione bpftop
 RUN dnf -y install bpftop && dnf clean all
 
-# 2. Installazione Cilium Tetragon (Estrazione diretta e nativa)
+# 2. Installazione Cilium Tetragon (Adattamento architettura OSTree/Bootc)
 ENV TETRAGON_VERSION=1.6.0
 RUN curl -fsSL -O https://github.com/cilium/tetragon/releases/download/v${TETRAGON_VERSION}/tetragon-v${TETRAGON_VERSION}-amd64.tar.gz && \
     curl -fsSL -O https://github.com/cilium/tetragon/releases/download/v${TETRAGON_VERSION}/tetragon-v${TETRAGON_VERSION}-amd64.tar.gz.sha256sum && \
     sha256sum -c tetragon-v${TETRAGON_VERSION}-amd64.tar.gz.sha256sum && \
-    mkdir -p /var/log/tetragon && \
-    tar -xzf tetragon-v${TETRAGON_VERSION}-amd64.tar.gz -C / --strip-components=1 && \
-    rm -f tetragon-v${TETRAGON_VERSION}-amd64*
+    # Estrazione temporanea
+    mkdir -p /tmp/tetragon-unpack && \
+    tar -xzf tetragon-v${TETRAGON_VERSION}-amd64.tar.gz -C /tmp/tetragon-unpack --strip-components=1 && \
+    # SPOSTAMENTO CRITICO: Fuori da /usr/local/ (che è volatile) verso /usr/ (che è immutabile)
+    mv /tmp/tetragon-unpack/usr/local/bin/tetragon /usr/bin/tetragon && \
+    mv /tmp/tetragon-unpack/usr/local/bin/tetra /usr/bin/tetra && \
+    mv /tmp/tetragon-unpack/usr/local/lib/tetragon /usr/lib/tetragon && \
+    # Pulizia
+    rm -rf /tmp/tetragon-unpack tetragon-v${TETRAGON_VERSION}-amd64*
 
 # 3. Definizione del servizio Systemd
 COPY tetragon.service /usr/lib/systemd/system/tetragon.service
