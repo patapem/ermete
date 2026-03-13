@@ -4,15 +4,14 @@ ExecStart=/usr/local/bin/tetragon --bpf-lib=/usr/local/lib/tetragon/ --export-fi
 Restart=on-failure
 RestartSec=5
 
-# Allentamento sandboxing per eBPF su Fedora 43
+# Ottimizzazioni per Fedora 43
 ProtectSystem=full
 ProtectHome=true
 PrivateTmp=true
-# Disabilitiamo queste tre per permettere il caricamento dei programmi BPF
+# Disabilitiamo queste direttive per permettere il caricamento dei programmi eBPF
 ProtectKernelTunables=false
 ProtectControlGroups=false
-RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK
-# Necessario per il mount di bpf_fs
+# Permette a Tetragon di gestire i propri mount e namespace
 MountFlags=shared
 RuntimeDirectory=tetragon
 ReadWritePaths=/var/log/tetragon/ /sys/fs/bpf/
