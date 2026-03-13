@@ -1,0 +1,14 @@
+[Unit]
+Description=Ermete OS UKI to ESP Synchronization Daemon
+After=local-fs.target
+Before=boot-complete.target greenboot-healthcheck.service
+ConditionPathExists=/sysroot/ostree/deploy/ermeteos/deploy
+
+
+Type=oneshot
+ExecStart=/usr/local/bin/ermete-uki-sync.sh
+RemainAfterExit=yes
+TimeoutSec=120
+
+[Install]
+WantedBy=multi-user.target
