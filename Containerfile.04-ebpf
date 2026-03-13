@@ -3,18 +3,18 @@ FROM localhost/gui:latest AS ebpf
 
 ENV TETRAGON_VERSION=1.6.0
 
-# 1. Download del tarball ufficiale come da documentazione
+# 1. Download del tarball ufficiale
 RUN curl -LO https://github.com/cilium/tetragon/releases/download/v${TETRAGON_VERSION}/tetragon-v${TETRAGON_VERSION}-amd64.tar.gz && \
     tar -xzf tetragon-v${TETRAGON_VERSION}-amd64.tar.gz && \
     cd tetragon-v${TETRAGON_VERSION}-amd64 && \
-    # 2. Adattamento Bootc: diciamo allo script ufficiale di usare la root immutabile (/usr) invece di quella volatile (/usr/local)
-    sed -i 's|/usr/local|/usr|g' install.sh tetragon.service && \
+    # 2. Adattamento Bootc: modifichiamo ESCLUSIVAMENTE l'install.sh per usare /usr
+    sed -i 's|/usr/local|/usr|g' install.sh && \
     # 3. Esecuzione dell'installazione ufficiale
     ./install.sh && \
     cd .. && \
     rm -rf tetragon-v${TETRAGON_VERSION}-amd64*
 
-# 4. Attivazione del demone (ora installato correttamente nei path nativi)
+# 4. Attivazione del demone
 RUN systemctl enable tetragon.service
 
 # 5. Validazione OSTree
