@@ -1,8 +1,12 @@
 # Containerfile.03-gui
 FROM localhost/hardware:latest AS gui
 
-# 1. Installazione dell'ambiente desktop Wayland con fallback legacy
+# 1. Installazione dell'ambiente desktop e dei driver base
 RUN dnf -y install \
+    # Driver Grafici (Risolve il crash di Discover)
+    mesa-dri-drivers \
+    mesa-vulkan-drivers \
+    # Base KDE Wayland
     plasma-desktop \
     plasma-workspace-wayland \
     kwin-wayland \
@@ -12,6 +16,21 @@ RUN dnf -y install \
     konsole \
     dolphin \
     polkit-kde \
+    # Stack Audio Moderno
+    pipewire \
+    wireplumber \
+    pipewire-pulse \
+    plasma-pa \
+    # Connettività (Wi-Fi e Bluetooth)
+    plasma-nm \
+    bluez \
+    bluedevil \
+    # Gestione Hardware (USB e Batteria)
+    udisks2 \
+    powerdevil \
+    # Font ed Emoji essenziali
+    google-noto-sans-fonts \
+    google-noto-color-emoji-fonts \
     && dnf clean all
 
 # 2. Strumenti di Produttività
@@ -27,6 +46,7 @@ RUN dnf -y install \
 RUN mkdir -p /etc/sddm.conf.d && \
     echo -e "[General]\nDisplayServer=wayland\n\n[Wayland]\nCompositorCommand=kwin_wayland --drm --no-lockscreen --no-global-shortcuts --locale1" > /etc/sddm.conf.d/10-wayland.conf
 
-# 4. Attivazione del Display Manager (SDDM) e target grafico
+# 4. Attivazione dei servizi (SDDM e Bluetooth)
 RUN systemctl enable sddm.service && \
+    systemctl enable bluetooth.service && \
     systemctl set-default graphical.target
