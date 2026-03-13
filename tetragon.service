@@ -5,13 +5,12 @@ Wants=sys-fs-bpf.mount
 
 [Service]
 Type=simple
-# Ripristino dei contesti SELinux necessari su Fedora
-ExecStartPre=+/usr/sbin/restorecon -v /usr/local/bin/tetragon /usr/local/bin/tetra
-ExecStart=/usr/local/bin/tetragon --bpf-lib=/usr/local/lib/tetragon/ --export-filename=/var/log/tetragon/tetragon.log
+# Path aggiornati per le root immutabili (/usr/bin/ invece di /usr/local/bin/)
+ExecStartPre=+/usr/sbin/restorecon -v /usr/bin/tetragon /usr/bin/tetra
+ExecStart=/usr/bin/tetragon --bpf-lib=/usr/lib/tetragon/ --export-filename=/var/log/tetragon/tetragon.log
 Restart=on-failure
 RestartSec=5
 
-# Gestione nativa delle directory per evitare errori di percorsi inesistenti
 LogsDirectory=tetragon
 RuntimeDirectory=tetragon
 
