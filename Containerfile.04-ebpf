@@ -9,12 +9,8 @@ ENV TETRAGON_VERSION=1.6.0
 RUN curl -fsSL -O https://github.com/cilium/tetragon/releases/download/v${TETRAGON_VERSION}/tetragon-v${TETRAGON_VERSION}-amd64.tar.gz && \
     curl -fsSL -O https://github.com/cilium/tetragon/releases/download/v${TETRAGON_VERSION}/tetragon-v${TETRAGON_VERSION}-amd64.tar.gz.sha256sum && \
     sha256sum -c tetragon-v${TETRAGON_VERSION}-amd64.tar.gz.sha256sum && \
-    # Creiamo preventivamente la cartella dei log
     mkdir -p /var/log/tetragon && \
-    # Estraiamo direttamente nella root / scartando la cartella contenitore del tarball.
-    # Questo posizionerà automaticamente i file in /usr/local/bin e /usr/local/lib/tetragon
     tar -xzf tetragon-v${TETRAGON_VERSION}-amd64.tar.gz -C / --strip-components=1 && \
-    # Pulizia immediata
     rm -f tetragon-v${TETRAGON_VERSION}-amd64*
 
 # 3. Definizione del servizio Systemd
@@ -22,17 +18,6 @@ COPY tetragon.service /usr/lib/systemd/system/tetragon.service
 
 # 4. Attivazione dichiarativa del demone Tetragon
 RUN systemctl enable tetragon.service
-
-# ---------------------------------------------------------------------
-# PATCH CRITICA SELINUX: Compilazione Policy e Labeling Binario
-# ---------------------------------------------------------------------
-RUN dnf -y install policycoreutils selinux-policy-targeted && \
-    # Compilazione del modulo base (il warning su cross-device link è normale nel container)
-    /usr/sbin/semodule -B && \
-    # Applicazione del contesto SELinux assoluto per file "unlabeled"
-    chcon system_u:object_r:bin_t:s0 /usr/local/bin/tetragon && \
-    chcon system_u:object_r:bin_t:s0 /usr/local/bin/tetra && \
-    dnf clean all
 
 # 5. Validazione finale e garbage collection
 RUN bootc container lint
