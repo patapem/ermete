@@ -1,29 +1,21 @@
 # Containerfile.04-ebpf
 FROM localhost/gui:latest AS ebpf
 
-# 1. Installazione bpftop
-RUN dnf -y install bpftop && dnf clean all
-
-# 2. Installazione Cilium Tetragon (Adattamento architettura OSTree/Bootc)
 ENV TETRAGON_VERSION=1.6.0
-RUN curl -fsSL -O https://github.com/cilium/tetragon/releases/download/v${TETRAGON_VERSION}/tetragon-v${TETRAGON_VERSION}-amd64.tar.gz && \
-    curl -fsSL -O https://github.com/cilium/tetragon/releases/download/v${TETRAGON_VERSION}/tetragon-v${TETRAGON_VERSION}-amd64.tar.gz.sha256sum && \
-    sha256sum -c tetragon-v${TETRAGON_VERSION}-amd64.tar.gz.sha256sum && \
-    # Estrazione temporanea
-    mkdir -p /tmp/tetragon-unpack && \
-    tar -xzf tetragon-v${TETRAGON_VERSION}-amd64.tar.gz -C /tmp/tetragon-unpack --strip-components=1 && \
-    # SPOSTAMENTO CRITICO: Fuori da /usr/local/ (che è volatile) verso /usr/ (che è immutabile)
-    mv /tmp/tetragon-unpack/usr/local/bin/tetragon /usr/bin/tetragon && \
-    mv /tmp/tetragon-unpack/usr/local/bin/tetra /usr/bin/tetra && \
-    mv /tmp/tetragon-unpack/usr/local/lib/tetragon /usr/lib/tetragon && \
-    # Pulizia
-    rm -rf /tmp/tetragon-unpack tetragon-v${TETRAGON_VERSION}-amd64*
 
-# 3. Definizione del servizio Systemd
-COPY tetragon.service /usr/lib/systemd/system/tetragon.service
+# 1. Download del tarball ufficiale come da documentazione
+RUN curl -LO https://github.com/cilium/tetragon/releases/download/v${TETRAGON_VERSION}/tetragon-v${TETRAGON_VERSION}-amd64.tar.gz && \
+    tar -xzf tetragon-v${TETRAGON_VERSION}-amd64.tar.gz && \
+    cd tetragon-v${TETRAGON_VERSION}-amd64 && \
+    # 2. Adattamento Bootc: diciamo allo script ufficiale di usare la root immutabile (/usr) invece di quella volatile (/usr/local)
+    sed -i 's|/usr/local|/usr|g' install.sh tetragon.service && \
+    # 3. Esecuzione dell'installazione ufficiale
+    ./install.sh && \
+    cd .. && \
+    rm -rf tetragon-v${TETRAGON_VERSION}-amd64*
 
-# 4. Attivazione dichiarativa del demone Tetragon
+# 4. Attivazione del demone (ora installato correttamente nei path nativi)
 RUN systemctl enable tetragon.service
 
-# 5. Validazione finale e garbage collection
+# 5. Validazione OSTree
 RUN bootc container lint
