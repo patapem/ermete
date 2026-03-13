@@ -1,11 +1,12 @@
-# tetragon.service
 [Unit]
 Description=Tetragon eBPF Security Observability & Enforcement
-After=network.target bpf_fs.mount
-Wants=bpf_fs.mount
+After=network.target sys-fs-bpf.mount
+Wants=sys-fs-bpf.mount
 
 [Service]
 Type=simple
+# PATCH SELINUX: Ripristina i contesti di sicurezza autorizzati prima dell'avvio
+ExecStartPre=+/usr/sbin/restorecon -v /usr/local/bin/tetragon /usr/local/bin/tetra
 ExecStart=/usr/local/bin/tetragon --bpf-lib=/usr/local/lib/tetragon/ --export-filename=/var/log/tetragon/tetragon.log
 Restart=on-failure
 RestartSec=5
@@ -19,7 +20,7 @@ ProtectControlGroups=false
 RestrictNamespaces=no
 MountFlags=shared
 RuntimeDirectory=tetragon
-ReadWritePaths=/var/log/tetragon/ /sys/fs/bpf/
+ReadWritePaths=/var/log/tetragon/ /sys/fs/bpf/ /sys/kernel/tracing/ /sys/kernel/debug/
 
 [Install]
 WantedBy=multi-user.target
