@@ -13,6 +13,8 @@ RUN curl -LO https://github.com/cilium/tetragon/releases/download/v${TETRAGON_VE
     # 3. Adattamento dei path e bypass di systemctl per ambiente di build
     sed -i 's|/usr/local|/usr|g' install.sh && \
     sed -i 's|systemctl|true|g' install.sh && \
+    # PATCH CONFIGURAZIONI: Correggiamo i path hardcoded nei file di testo di Tetragon
+    sed -i 's|/usr/local|/usr|g' usr/lib/tetragon/tetragon.conf.d/* && \
     # 4. Esecuzione dell'installazione ufficiale
     ./install.sh && \
     cd .. && \
