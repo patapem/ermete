@@ -1,12 +1,14 @@
 # Containerfile.03-gui
 FROM localhost/hardware:latest AS gui
 
-# 1. Installazione dell'ambiente desktop e dei driver base
+# 1. Installazione dell'ambiente desktop, driver base e utility essenziali
 RUN dnf -y install \
-    # Driver Grafici (Risolve il crash di Discover)
+    # Driver Grafici e Accelerazione Video Hardware
     mesa-dri-drivers \
     mesa-vulkan-drivers \
-    # Base KDE Wayland
+    mesa-va-drivers \
+    mesa-vdpau-drivers \
+    # Base KDE Wayland, Coerenza Visiva e Monitor
     plasma-desktop \
     plasma-workspace-wayland \
     kwin-wayland \
@@ -16,18 +18,47 @@ RUN dnf -y install \
     konsole \
     dolphin \
     polkit-kde \
+    breeze-gtk \
+    xdg-user-dirs \
+    systemsettings \
+    kscreen \
+    ddcutil \
     # Stack Audio Moderno
     pipewire \
     wireplumber \
     pipewire-pulse \
     plasma-pa \
-    # Connettività (Wi-Fi e Bluetooth)
+    # Connettività (Wi-Fi Backend + Bluetooth)
+    NetworkManager-wifi \
     plasma-nm \
     bluez \
     bluedevil \
     # Gestione Hardware (USB e Batteria)
     udisks2 \
     powerdevil \
+    # Portali e Sicurezza (Sandboxing Flatpak e Password)
+    xdg-desktop-portal-kde \
+    kwallet \
+    kwallet-pam \
+    # Gestione File avanzata, Archivi e Anteprime
+    kio-extras \
+    kio-fuse \
+    ffmpegthumbs \
+    kdegraphics-thumbnailers \
+    ark \
+    zip \
+    unzip \
+    p7zip \
+    p7zip-plugins \
+    unar \
+    lzop \
+    lrzip \
+    # Riproduzione Media Minimalista (KISS)
+    mpv \
+    # Strumenti di Sistema Essenziali
+    spectacle \
+    plasma-systemmonitor \
+    fastfetch \
     # Font ed Emoji essenziali
     google-noto-sans-fonts \
     google-noto-color-emoji-fonts \
@@ -42,11 +73,16 @@ RUN dnf -y install \
     podman \
     && dnf clean all
 
-# 3. Configurazione SDDM per forzare il compositing Wayland nativo
+# 3. FIX CRITICO: Iniezione dichiarativa di Flathub per sistemi immutabili
+# Configura Discover per trovare istantaneamente tutte le app mondiali senza toccare il terminale
+RUN mkdir -p /etc/flatpak/remotes.d && \
+    curl -o /etc/flatpak/remotes.d/flathub.flatpakrepo https://dl.flathub.org/repo/flathub.flatpakrepo
+
+# 4. Configurazione SDDM per forzare il compositing Wayland nativo
 RUN mkdir -p /etc/sddm.conf.d && \
     echo -e "[General]\nDisplayServer=wayland\n\n[Wayland]\nCompositorCommand=kwin_wayland --drm --no-lockscreen --no-global-shortcuts --locale1" > /etc/sddm.conf.d/10-wayland.conf
 
-# 4. Attivazione dei servizi (SDDM e Bluetooth)
+# 5. Attivazione dei servizi (SDDM e Bluetooth)
 RUN systemctl enable sddm.service && \
     systemctl enable bluetooth.service && \
     systemctl set-default graphical.target
