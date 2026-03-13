@@ -18,8 +18,13 @@ RUN curl -LO https://github.com/cilium/tetragon/releases/download/v${TETRAGON_VE
     cd .. && \
     rm -rf tetragon-v${TETRAGON_VERSION}-amd64*
 
-# 5. Attivazione del demone (modalità offline dichiarativa per bootc)
+# ---------------------------------------------------------
+# 5. FIX CRITICO: Allineamento dei path nel file di servizio
+# ---------------------------------------------------------
+RUN sed -i 's|/usr/local|/usr|g' /usr/lib/systemd/system/tetragon.service
+
+# 6. Attivazione del demone (modalità offline dichiarativa)
 RUN systemctl enable tetragon.service
 
-# 6. Validazione OSTree
+# 7. Validazione OSTree
 RUN bootc container lint
