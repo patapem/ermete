@@ -1,0 +1,18 @@
+# Containerfile.02-hardware
+FROM localhost/core:latest AS hardware
+
+# 1. Iniezione direttive layout per rpm-ostree / bootc
+RUN mkdir -p /usr/lib/kernel && \
+    echo "layout=ostree" > /usr/lib/kernel/install.conf
+
+# 2. Installazione tool per UKI (Mantenendo il Kernel Stock Fedora 43)
+RUN dnf -y install systemd-ukify sbsigntools uki-direct && \
+    dnf clean all
+
+# 3. Configurazione UKI (systemd-ukify) 
+COPY uki.conf /etc/kernel/uki.conf
+
+# 4. Organizzazione strutturale UKI per bootc
+RUN KVER=$(ls /usr/lib/modules/ | head -n 1) && \
+    mkdir -p /usr/lib/modules/${KVER} && \
+    echo "Il kernel attivo è $KVER. Rigenerazione initramfs delegata."
