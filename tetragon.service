@@ -1,7 +1,8 @@
 [Unit]
 Description=Tetragon eBPF Security Observability & Enforcement
-After=network.target sys-fs-bpf.mount
-Wants=sys-fs-bpf.mount
+# Aggiunte le dipendenze esplicite per i filesystem di tracing del kernel
+After=network.target sys-fs-bpf.mount sys-kernel-debug.mount sys-kernel-tracing.mount
+Wants=sys-fs-bpf.mount sys-kernel-debug.mount sys-kernel-tracing.mount
 
 [Service]
 Type=simple
@@ -11,7 +12,7 @@ ExecStart=/usr/local/bin/tetragon --bpf-lib=/usr/local/lib/tetragon/ --export-fi
 Restart=on-failure
 RestartSec=5
 
-# Hardening ottimizzato per Fedora 43
+# Hardening ottimizzato per Fedora 43 Atomic/Bootc
 ProtectSystem=full
 ProtectHome=true
 PrivateTmp=true
@@ -20,7 +21,10 @@ ProtectControlGroups=false
 RestrictNamespaces=no
 MountFlags=shared
 RuntimeDirectory=tetragon
-ReadWritePaths=/var/log/tetragon/ /sys/fs/bpf/ /sys/kernel/tracing/ /sys/kernel/debug/
+# CREAZIONE DINAMICA DELLA DIRECTORY DI LOG: Risolve l'errore 226/NAMESPACE
+LogsDirectory=tetragon
+# Rimossa /var/log/tetragon/ perché implicitamente gestita e autorizzata da LogsDirectory
+ReadWritePaths=/sys/fs/bpf/ /sys/kernel/tracing/ /sys/kernel/debug/
 
 [Install]
 WantedBy=multi-user.target
