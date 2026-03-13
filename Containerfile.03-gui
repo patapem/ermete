@@ -1,5 +1,5 @@
 # Containerfile.03-gui
-FROM localhost/hardware:latest AS gui
+FROM localhost/ermete-02-hardware:latest AS gui
 
 # 1. Installazione dell'ambiente desktop, driver base e utility essenziali
 RUN dnf -y install \

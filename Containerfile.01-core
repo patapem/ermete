@@ -1,41 +1,60 @@
-# Containerfile.01-core
-FROM quay.io/fedora/fedora-bootc:43 AS core
+# Ermete OS: Containerfile.01-core
+FROM quay.io/fedora/fedora-bootc:43
 
-# 1. Purga del Machine-ID per il deployment agnostico e riproducibile
-# Garantisce che ogni nodo nudo generi una propria identità crittografica.
-RUN truncate -s 0 /etc/machine-id
+# ==============================================================================
+# FASE 1: Definizione variabili d'ambiente e installazione toolset UKI
+# ==============================================================================
+ENV KERNEL_VERSION="stock" \
+    EFI_ARCH="x64"
 
-# 2. Rimozione dei pacchetti non essenziali e installazione subsystem critici
-# PATCH APPLICATA: Aggiunti policycoreutils e selinux-policy-targeted per evitare il crash di ostree-finalize
-RUN dnf -y remove NetworkManager-ssh systemd-networkd && \
-    dnf -y install zram-generator nftables systemd-resolved policycoreutils selinux-policy-targeted && \
+RUN dnf -y upgrade && \
+    dnf -y install \
+    systemd-ukify \
+    systemd-boot \
+    sbsigntools \
+    openssl \
+    mokutil \
+    efibootmgr \
+    composefs \
+    dracut-network && \
     dnf clean all
 
-# 3. Configurazione ZRAM per swap ottimizzato in memoria
+# ==============================================================================
+# FASE 2: Eradicazione dello stack legacy e prevenzione esecuzione dracut locale
+# ==============================================================================
+RUN dnf -y remove \
+    grub2-* \
+    grubby \
+    dracut-config-rescue && \
+    dnf clean all
+
+RUN rm -f /usr/lib/kernel/install.d/50-dracut.install && \
+    rm -f /usr/lib/kernel/install.d/51-dracut-rescue.install && \
+    ln -s /dev/null /usr/lib/kernel/install.d/50-dracut.install && \
+    ln -s /dev/null /usr/lib/kernel/install.d/51-dracut-rescue.install
+
+# ==============================================================================
+# FASE 3: Configurazione Bootloader e Kargs per UKI
+# ==============================================================================
+RUN echo 'BOOTLOADER="systemd-boot"' > /etc/sysconfig/bootloader && \
+    mkdir -p /usr/lib/bootc/kargs.d/
+
+COPY <<EOF /usr/lib/bootc/kargs.d/10-ermete-uki.toml
+kargs = ["quiet", "splash", "root=ostree", "ostree=latest", "ro"]
+match-architectures = ["x86_64"]
+EOF
+
+# ==============================================================================
+# FASE 4: Ottimizzazione, Hardening e Servizi Core (Integrazione Ermete OS)
+# ==============================================================================
 COPY zram-generator.conf /etc/systemd/zram-generator.conf
-
-# 4. Ottimizzazione Kernel e Hardening Rete (sysctl)
 COPY 99-hardening-performance.conf /etc/sysctl.d/99-hardening-performance.conf
-
-# 5. Configurazione Firewall Dichiarativo (Nftables)
-# Percorso corretto per Fedora: il servizio cerca la config in /etc/sysconfig/
 COPY nftables.conf /etc/sysconfig/nftables.conf
 
-# 6. Attivazione dichiarativa dei servizi Systemd in fase di build
 RUN systemctl enable nftables.service && \
     systemctl enable systemd-resolved.service
 
-# 7. Assicurare che SELinux rimanga in enforcing
+# ==============================================================================
+# FASE 5: Policy di Sicurezza Obbligatorie
+# ==============================================================================
 RUN sed -i 's/^SELINUX=.*/SELINUX=enforcing/' /etc/selinux/config
-
-# 8. Sicurezza Supply Chain (Fase 1): Configurazione client per Sigstore
-# Istruisce ostree/podman a cercare e pretendere gli allegati crittografici (firme) sul registry
-RUN mkdir -p /etc/containers/registries.d && \
-    echo -e "docker:\n  ghcr.io/patapem/ermete:\n    use-sigstore-attachments: true" > /etc/containers/registries.d/ermete.yaml
-
-# 9. Creazione Utente Amministratore di Default
-# Creiamo l'utente 'ermete', lo aggiungiamo al gruppo 'wheel' (sudo) 
-# e impostiamo una password di test.
-RUN useradd -m -G wheel -s /bin/bash ermete && \
-    echo "ermete:password" | chpasswd && \
-    echo "root:password" | chpasswd

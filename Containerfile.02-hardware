@@ -1,18 +1,52 @@
-# Containerfile.02-hardware
-FROM localhost/core:latest AS hardware
+# Ermete OS: Containerfile.02-hardware
+FROM localhost/ermete-01-core:latest
 
-# 1. Iniezione direttive layout per rpm-ostree / bootc
-RUN mkdir -p /usr/lib/kernel && \
-    echo "layout=ostree" > /usr/lib/kernel/install.conf
+# ==============================================================================
+# FASE 1: Hardware Support & TPM2 Clevis Integration
+# ==============================================================================
+RUN dnf -y install \
+    linux-firmware \
+    tpm2-tools \
+    clevis-systemd \
+    clevis-dracut \
+    clevis-luks \
+    && dnf clean all
 
-# 2. Installazione tool per UKI (Mantenendo il Kernel Stock Fedora 43)
-RUN dnf -y install systemd-ukify sbsigntools uki-direct && \
-    dnf clean all
+# ==============================================================================
+# FASE 2: Configurazione Zero-Trust per ComposeFS
+# ==============================================================================
+COPY <<EOF /etc/ostree/prepare-root.conf
+[composefs]
+enabled = yes
+[root]
+transient = true
+EOF
 
-# 3. Configurazione UKI (systemd-ukify) 
-COPY uki.conf /etc/kernel/uki.conf
+# ==============================================================================
+# FASE 3: Tuning dell'Initramfs per Generazione in Pipeline
+# ==============================================================================
+COPY <<EOF /etc/dracut.conf.d/50-ermete-uki.conf
+hostonly="no"
+compress="zstd"
+add_dracutmodules+=" ostree systemd tpm2-tss "
+omit_dracutmodules+=" rescue "
+EOF
 
-# 4. Organizzazione strutturale UKI per bootc
-RUN KVER=$(ls /usr/lib/modules/ | head -n 1) && \
-    mkdir -p /usr/lib/modules/${KVER} && \
-    echo "Il kernel attivo è $KVER. Rigenerazione initramfs delegata."
+# ==============================================================================
+# FASE 4: Direttive Bootupd e Servizi Custom (Workarounds)
+# ==============================================================================
+COPY <<EOF /usr/lib/bootc/install/00-ermete-bootloader.toml
+[install.bootupd]
+backend = "systemd-boot"
+[install]
+bootloader = "systemd-boot"
+EOF
+
+# Iniezione degli script di sincronizzazione UKI e provisioning MOK
+COPY scripts/ermete-uki-sync.sh /usr/local/bin/ermete-uki-sync.sh
+COPY scripts/ermete-enroll-mok.sh /usr/local/bin/ermete-enroll-mok.sh
+COPY systemd/ermete-uki-sync.service /etc/systemd/system/ermete-uki-sync.service
+
+RUN chmod +x /usr/local/bin/ermete-uki-sync.sh && \
+    chmod +x /usr/local/bin/ermete-enroll-mok.sh && \
+    systemctl enable ermete-uki-sync.service

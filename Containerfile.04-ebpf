@@ -1,5 +1,5 @@
 # Containerfile.04-ebpf
-FROM localhost/gui:latest AS ebpf
+FROM FROM localhost/ermete-03-gui:latest AS ebpf
 
 ENV TETRAGON_VERSION=1.6.0
 
