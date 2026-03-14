@@ -1,5 +1,7 @@
 # Ermete OS: Containerfile.02-hardware
 # CHANGELOG: Integrazione TPM2, abilitazione ComposeFS transient, forcing bootupd su systemd-boot, tuning dracut pipeline.
+# CHANGELOG (Fix 1): Sostituzione heredoc con stringhe echo -e per bypass del parser OCI su multiriga.
+
 FROM localhost/core:latest AS hardware
 
 # 1. Hardware Support & TPM2 Integration
@@ -12,35 +14,18 @@ RUN dnf -y install \
     && dnf clean all
 
 # 2. Configurazione Zero-Trust per ComposeFS
-COPY <<EOF /etc/ostree/prepare-root.conf
-[composefs]
-enabled = yes
-[root]
-transient = true
-EOF
-
+RUN echo -e "[composefs]\nenabled = yes\n[root]\ntransient = true" > /etc/ostree/prepare-root.conf
 
 # 3. Tuning Initramfs per Generazione in Pipeline
-COPY <<EOF /etc/dracut.conf.d/50-ermete-uki.conf
-hostonly="no"
-compress="zstd"
-add_dracutmodules+=" ostree systemd tpm2-tss "
-omit_dracutmodules+=" rescue "
-EOF
-
+RUN echo -e "hostonly=\"no\"\ncompress=\"zstd\"\nadd_dracutmodules+=\" ostree systemd tpm2-tss \"\nomit_dracutmodules+=\" rescue \"" > /etc/dracut.conf.d/50-ermete-uki.conf
 
 # 4. Direttive bootupd per systemd-boot
-COPY <<EOF /usr/lib/bootc/install/00-ermete-bootloader.toml
-[install.bootupd]
-backend = "systemd-boot"
-[install]
-bootloader = "systemd-boot"
-EOF
-
+RUN echo -e "[install.bootupd]\nbackend = \"systemd-boot\"\n[install]\nbootloader = \"systemd-boot\"" > /usr/lib/bootc/install/00-ermete-bootloader.toml
 
 # 5. Setup Kernel Layout
 RUN mkdir -p /usr/lib/kernel && \
     echo "layout=ostree" > /usr/lib/kernel/install.conf && \
     KVER=$(ls /usr/lib/modules/ | head -n 1) && \
     mkdir -p /usr/lib/modules/${KVER}
+
 COPY uki.conf /etc/kernel/uki.conf
