@@ -1,116 +1,110 @@
-name: Build and Sign Ermete OS
+# CHANGELOG: Fusione della pipeline di build OCI con logica UKI: estrazione initramfs, build systemd-ukify, firma sbsign MOK e iniezione nel layer OCI.
+name: Build and Push Fedora Atomic OS
 on:
   push:
-    branches: [ "main", "v1.0", "testing-uki" ]
-  workflow_dispatch:
+    branches: 
+      - "main"
+      - "testing-uki"
+  schedule:
+    - cron: '0 2 * * *'
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository_owner }}/ermete-os
+  IMAGE_NAME: ${{ github.repository_owner }}/ermete
 
 jobs:
-  build-layers-and-sign-uki:
+  build-and-push:
     runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
-
+      id-token: write
     steps:
-      - name: Checkout Repository
+      - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Setup Podman & Authenticate to GHCR
-        uses: redhat-actions/podman-login@v1
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Build Layer 01 (Core)
+      - name: Free up disk space
         run: |
-          podman build \
-            --tag localhost/ermete-01-core:latest \
-            --file Containerfile.01-core \
-           .
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/share/boost "$AGENT_TOOLSDIRECTORY"
+          sudo docker system prune -af
 
-      - name: Build Layer 02 (Hardware)
+      - name: Generate Tags
+        id: tags
         run: |
-          podman build \
-            --tag localhost/ermete-02-hardware:latest \
-            --file Containerfile.02-hardware \
-           .
+          echo "sha_short=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+          echo "date_tag=$(date +'%Y%m%d')" >> $GITHUB_OUTPUT
 
-      - name: Build Layer 03 (GUI)
+      - name: Build Layers 01-03
         run: |
-          podman build \
-            --tag localhost/ermete-03-gui:latest \
-            --file Containerfile.03-gui \
-           .
+          podman build -t localhost/core:latest -f Containerfile.01-core .
+          podman build -t localhost/hardware:latest -f Containerfile.02-hardware .
+          podman build -t localhost/gui:latest -f Containerfile.03-gui .
 
-      - name: Build Layer 04 (eBPF - Unsigned Base)
+      - name: Extract Kernel, Stub and Generate Initramfs
         run: |
-          podman build \
-            --tag localhost/ermete-04-ebpf-unsigned:latest \
-            --file Containerfile.04-ebpf \
-           .
-
-      - name: Extract Kernel, Stub and Generate Universal Initramfs
-        run: |
-          CONTAINER_ID=$(podman create localhost/ermete-04-ebpf-unsigned:latest)
+          CONTAINER_ID=$(podman create localhost/gui:latest)
           mkdir -p build-uki
-          
-          KVER=$(podman run --rm localhost/ermete-04-ebpf-unsigned:latest ls -1 /usr/lib/modules/ | grep -v "dracut" | head -n 1)
-          echo "Rilevata versione kernel: $KVER"
-          
-          podman run --rm --privileged \
-            -v $(pwd)/build-uki:/out localhost/ermete-04-ebpf-unsigned:latest \
-            dracut --nomdadmconf --nolvmconf --no-hostonly -f /out/initramfs.img ${KVER}
-            
+          KVER=$(podman run --rm localhost/gui:latest ls -1 /usr/lib/modules/ | grep -v "dracut" | head -n 1)
+          podman run --rm --privileged -v $(pwd)/build-uki:/out localhost/gui:latest dracut --nomdadmconf --nolvmconf --no-hostonly -f /out/initramfs.img ${KVER}
           podman cp ${CONTAINER_ID}:/usr/lib/modules/${KVER}/vmlinuz build-uki/vmlinuz
           podman cp ${CONTAINER_ID}:/usr/lib/systemd/boot/efi/linuxx64.efi.stub build-uki/linuxx64.efi.stub
-          podman rm -f ${CONTAINER_ID}
+          podman rm ${CONTAINER_ID} # [cite: 98, 99, 101, 102]
 
       - name: Assemble Unified Kernel Image (UKIFY)
         run: |
           sudo apt-get update && sudo apt-get install -y systemd-ukify
-          
           echo "root=ostree ostree=latest quiet rw intel_iommu=on slab_nomerge module.sig_enforce=1" > build-uki/cmdline.txt
-          
           ukify build \
             --linux=build-uki/vmlinuz \
             --initrd=build-uki/initramfs.img \
             --cmdline=@build-uki/cmdline.txt \
             --stub=build-uki/linuxx64.efi.stub \
             --os-release="NAME=\"Ermete OS\" VERSION_ID=\"1.0\" ID=ermeteos" \
-            --output=build-uki/vmlinuz-ermete-unsigned.efi
+            --output=build-uki/vmlinuz-ermete-unsigned.efi # [cite: 103, 104, 105]
 
-      - name: Inject Keys and Cryptographically Sign UKI (SBSIGN)
+      - name: Inject Keys and Sign UKI
         env:
           MOK_PRIV: ${{ secrets.ERMETE_MOK_PRIV }}
           MOK_CERT: ${{ secrets.ERMETE_MOK_CERT }}
         run: |
           echo "$MOK_PRIV" > build-uki/MOK.key
           echo "$MOK_CERT" > build-uki/MOK.crt
-          
           sudo apt-get install -y sbsigntool
-          
-          sbsign --key build-uki/MOK.key \
-                 --cert build-uki/MOK.crt \
-                 --output build-uki/vmlinuz-ermete.efi \
-                 build-uki/vmlinuz-ermete-unsigned.efi
-                 
-          rm -f build-uki/MOK.key build-uki/MOK.crt build-uki/vmlinuz-ermete-unsigned.efi
+          sbsign --key build-uki/MOK.key --cert build-uki/MOK.crt --output build-uki/vmlinuz-ermete.efi build-uki/vmlinuz-ermete-unsigned.efi
+          rm -f build-uki/MOK.key build-uki/MOK.crt build-uki/vmlinuz-ermete-unsigned.efi # [cite: 106, 107, 109, 110]
 
-      - name: Create Final Signed OCI Image
+      - name: Inject Signed UKI & Build Final eBPF Layer
         run: |
-          cat << 'EOF' > Containerfile.final
-          FROM localhost/ermete-04-ebpf-unsigned:latest
-          COPY build-uki/vmlinuz-ermete.efi /usr/lib/modules/vmlinuz-ermete.efi
+          cat <<EOF > Containerfile.final
+          FROM localhost/gui:latest
+          COPY ./build-uki/vmlinuz-ermete.efi /usr/lib/modules/vmlinuz-ermete.efi
           EOF
-          
+          podman build -t localhost/gui-signed:latest -f Containerfile.final .
+          sed -i 's|FROM localhost/gui:latest|FROM localhost/gui-signed:latest|' Containerfile.04-ebpf
           podman build \
-            --tag ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest \
-            --file Containerfile.final \
-           .
-            
-          podman push ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+            -t ghcr.io/${{ env.IMAGE_NAME }}:latest \
+            -t ghcr.io/${{ env.IMAGE_NAME }}:${{ steps.tags.outputs.sha_short }} \
+            -t ghcr.io/${{ env.IMAGE_NAME }}:${{ steps.tags.outputs.date_tag }} \
+            -f Containerfile.04-ebpf . # [cite: 112]
+
+      - name: Login to GitHub Container Registry
+        uses: redhat-actions/podman-login@v1
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          [cite_start]password: ${{ secrets.GITHUB_TOKEN }} # [cite: 95, 96]
+
+      - name: Push OS Image
+        run: |
+          podman push ghcr.io/${{ env.IMAGE_NAME }}:latest
+          podman push ghcr.io/${{ env.IMAGE_NAME }}:${{ steps.tags.outputs.sha_short }}
+          podman push ghcr.io/${{ env.IMAGE_NAME }}:${{ steps.tags.outputs.date_tag }} # [cite: 113]
+
+      - name: Install Cosign & Sign Image
+        uses: sigstore/cosign-installer@v3.5.0
+      - name: Sign the Published Image
+        env:
+          COSIGN_EXPERIMENTAL: "true"
+        run: |
+          cosign sign --yes ghcr.io/${{ env.IMAGE_NAME }}:latest
+          cosign sign --yes ghcr.io/${{ env.IMAGE_NAME }}:${{ steps.tags.outputs.sha_short }}
