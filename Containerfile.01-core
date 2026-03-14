@@ -1,16 +1,23 @@
 # Ermete OS: Containerfile.01-core
 # CHANGELOG: Refactoring applicato. Rimozione GRUB2. Iniezione statica kargs 'ostree=latest'. Disabilitazione client-side dracut. Integrazione systemd-boot.
+# CHANGELOG (Fix): Aggiunto --setopt=strict=0 per DNF. Esclusione di grub2-efi-x64 dalla rimozione per preservare la dipendenza hard di shim-x64.
 FROM quay.io/fedora/fedora-bootc:43 AS core
 
 ENV KERNEL_VERSION="stock" \
     EFI_ARCH="x64"
 
 # 1. Purga del Machine-ID per il deployment agnostico
-RUN truncate -s 0 /etc/machine-id 
+RUN truncate -s 0 /etc/machine-id
 
-# 2. Rimozione stack legacy (GRUB) e installazione toolset UKI/Secure Boot
-RUN dnf -y remove \
-    grub2-* \
+# 2. Rimozione parziale stack legacy (GRUB) e installazione toolset UKI/Secure Boot
+# L'uso di --setopt=strict=0 previene i fallimenti se un pacchetto è già assente.
+# Viene mantenuto grub2-efi-x64 per soddisfare shim-x64 (necessario per MOK chainloading),
+# ma disattiviamo la logica locale eliminando i tools e i parser.
+RUN dnf -y remove --setopt=strict=0 \
+    grub2-tools \
+    grub2-tools-minimal \
+    grub2-tools-extra \
+    grub2-common \
     grubby \
     dracut-config-rescue \
     NetworkManager-ssh \
@@ -35,7 +42,7 @@ RUN dnf -y remove \
 RUN rm -f /usr/lib/kernel/install.d/50-dracut.install && \
     rm -f /usr/lib/kernel/install.d/51-dracut-rescue.install && \
     ln -s /dev/null /usr/lib/kernel/install.d/50-dracut.install && \
-    ln -s /dev/null /usr/lib/kernel/install.d/51-dracut-rescue.install # [cite: 41]
+    ln -s /dev/null /usr/lib/kernel/install.d/51-dracut-rescue.install
 
 # 4. Configurazione Bootloader e Kargs
 RUN echo 'BOOTLOADER="systemd-boot"' > /etc/sysconfig/bootloader && \
@@ -45,7 +52,6 @@ COPY <<EOF /usr/lib/bootc/kargs.d/10-ermete-uki.toml
 kargs = ["quiet", "splash", "root=ostree", "ostree=latest", "ro"]
 match-architectures = ["x86_64"]
 EOF
-
 
 # 5. Ottimizzazione Sistema e Sicurezza
 COPY zram-generator.conf /etc/systemd/zram-generator.conf
