@@ -1,13 +1,20 @@
 # Ermete OS: Containerfile.01-core
-FROM quay.io/fedora/fedora-bootc:43
+# CHANGELOG: Refactoring applicato. Rimozione GRUB2. Iniezione statica kargs 'ostree=latest'. Disabilitazione client-side dracut. Integrazione systemd-boot.
+FROM quay.io/fedora/fedora-bootc:43 AS core
 
-# ==============================================================================
-# FASE 1: Definizione variabili d'ambiente e installazione toolset UKI
-# ==============================================================================
 ENV KERNEL_VERSION="stock" \
     EFI_ARCH="x64"
 
-RUN dnf -y upgrade && \
+# 1. Purga del Machine-ID per il deployment agnostico
+RUN truncate -s 0 /etc/machine-id 
+
+# 2. Rimozione stack legacy (GRUB) e installazione toolset UKI/Secure Boot
+RUN dnf -y remove \
+    grub2-* \
+    grubby \
+    dracut-config-rescue \
+    NetworkManager-ssh \
+    systemd-networkd && \
     dnf -y install \
     systemd-ukify \
     systemd-boot \
@@ -16,26 +23,21 @@ RUN dnf -y upgrade && \
     mokutil \
     efibootmgr \
     composefs \
-    dracut-network && \
+    dracut-network \
+    zram-generator \
+    nftables \
+    systemd-resolved \
+    policycoreutils \
+    selinux-policy-targeted && \
     dnf clean all
 
-# ==============================================================================
-# FASE 2: Eradicazione dello stack legacy e prevenzione esecuzione dracut locale
-# ==============================================================================
-RUN dnf -y remove \
-    grub2-* \
-    grubby \
-    dracut-config-rescue && \
-    dnf clean all
-
+# 3. Prevenzione esecuzione locale dracut tramite hard-linking
 RUN rm -f /usr/lib/kernel/install.d/50-dracut.install && \
     rm -f /usr/lib/kernel/install.d/51-dracut-rescue.install && \
     ln -s /dev/null /usr/lib/kernel/install.d/50-dracut.install && \
-    ln -s /dev/null /usr/lib/kernel/install.d/51-dracut-rescue.install
+    ln -s /dev/null /usr/lib/kernel/install.d/51-dracut-rescue.install # [cite: 41]
 
-# ==============================================================================
-# FASE 3: Configurazione Bootloader e Kargs per UKI
-# ==============================================================================
+# 4. Configurazione Bootloader e Kargs
 RUN echo 'BOOTLOADER="systemd-boot"' > /etc/sysconfig/bootloader && \
     mkdir -p /usr/lib/bootc/kargs.d/
 
@@ -44,17 +46,19 @@ kargs = ["quiet", "splash", "root=ostree", "ostree=latest", "ro"]
 match-architectures = ["x86_64"]
 EOF
 
-# ==============================================================================
-# FASE 4: Ottimizzazione, Hardening e Servizi Core (Integrazione Ermete OS)
-# ==============================================================================
+
+# 5. Ottimizzazione Sistema e Sicurezza
 COPY zram-generator.conf /etc/systemd/zram-generator.conf
 COPY 99-hardening-performance.conf /etc/sysctl.d/99-hardening-performance.conf
 COPY nftables.conf /etc/sysconfig/nftables.conf
 
 RUN systemctl enable nftables.service && \
-    systemctl enable systemd-resolved.service
+    systemctl enable systemd-resolved.service && \
+    sed -i 's/^SELINUX=.*/SELINUX=enforcing/' /etc/selinux/config
 
-# ==============================================================================
-# FASE 5: Policy di Sicurezza Obbligatorie
-# ==============================================================================
-RUN sed -i 's/^SELINUX=.*/SELINUX=enforcing/' /etc/selinux/config
+# 6. Sicurezza Supply Chain e Utenti
+RUN mkdir -p /etc/containers/registries.d && \
+    echo -e "docker:\n  ghcr.io/patapem/ermete:\n    use-sigstore-attachments: true" > /etc/containers/registries.d/ermete.yaml && \
+    useradd -m -G wheel -s /bin/bash ermete && \
+    echo "ermete:password" | chpasswd && \
+    echo "root:password" | chpasswd
