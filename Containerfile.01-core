@@ -1,6 +1,8 @@
 # Ermete OS: Containerfile.01-core
-# CHANGELOG: Refactoring applicato. Rimozione GRUB2. Iniezione statica kargs 'ostree=latest'. Disabilitazione client-side dracut. Integrazione systemd-boot.
-# CHANGELOG (Fix): Aggiunto --setopt=strict=0 per DNF. Esclusione di grub2-efi-x64 dalla rimozione per preservare la dipendenza hard di shim-x64.
+# CHANGELOG: Refactoring applicato. Iniezione statica kargs 'ostree=latest'. Disabilitazione client-side dracut. Integrazione systemd-boot.
+# CHANGELOG (Fix 1): Aggiunto --setopt=strict=0 per DNF.
+# CHANGELOG (Fix 2): Mantenimento dei pacchetti grub2-* per preservare l'albero delle dipendenze di shim-x64. L'inibizione di GRUB è delegata a systemd-boot.
+
 FROM quay.io/fedora/fedora-bootc:43 AS core
 
 ENV KERNEL_VERSION="stock" \
@@ -9,15 +11,9 @@ ENV KERNEL_VERSION="stock" \
 # 1. Purga del Machine-ID per il deployment agnostico
 RUN truncate -s 0 /etc/machine-id
 
-# 2. Rimozione parziale stack legacy (GRUB) e installazione toolset UKI/Secure Boot
-# L'uso di --setopt=strict=0 previene i fallimenti se un pacchetto è già assente.
-# Viene mantenuto grub2-efi-x64 per soddisfare shim-x64 (necessario per MOK chainloading),
-# ma disattiviamo la logica locale eliminando i tools e i parser.
+# 2. Installazione toolset UKI/Secure Boot e rimozione selettiva
+# Si escludono i pacchetti grub2-* dalla rimozione per soddisfare shim-x64.
 RUN dnf -y remove --setopt=strict=0 \
-    grub2-tools \
-    grub2-tools-minimal \
-    grub2-tools-extra \
-    grub2-common \
     grubby \
     dracut-config-rescue \
     NetworkManager-ssh \
