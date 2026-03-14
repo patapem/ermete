@@ -10,7 +10,7 @@ ENV KERNEL_VERSION="stock" \
 # 1. Purga del Machine-ID per il deployment agnostico
 RUN truncate -s 0 /etc/machine-id
 
-# 2. Installazione toolset UKI/Secure Boot e rimozione selettiva
+# 2. Installazione toolset UKI/Secure Boot, bootupd e rimozione selettiva
 RUN dnf -y remove --setopt=strict=0 \
     grubby \
     dracut-config-rescue \
@@ -19,6 +19,7 @@ RUN dnf -y remove --setopt=strict=0 \
     dnf -y install \
     systemd-ukify \
     systemd-boot \
+    bootupd \
     sbsigntools \
     openssl \
     mokutil \
