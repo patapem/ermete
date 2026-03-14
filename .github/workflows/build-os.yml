@@ -2,13 +2,15 @@
 # 1. Risolto errore di sintassi YAML sull'escaping di --os-release.
 # 2. Sostituiti i blocchi heredoc non supportati nativamente dal parser YAML/Bash.
 # 3. Aggiunto il ramo `testing-uki` ai trigger di esecuzione.
-# 4. [ATTUALE] Rimozione totale della logica di decodifica Base64. I secret vengono trascritti direttamente come testo RAW PEM nativo.
+# 4. Rimozione totale della logica di decodifica Base64. I secret vengono trascritti direttamente come testo RAW PEM nativo.
+# 5. [ATTUALE] Rimozione dei parametri 'root=ostree ostree=latest' dall'UKI. L'hash verrà iniettato dinamicamente a runtime.
 
 name: Build and Push Fedora Atomic OS
 on:
   push:
     branches: 
       - "main"
+      - "refactoring-enterprise"
       - "testing-uki"
   schedule:
     - cron: '0 2 * * *'
@@ -58,7 +60,7 @@ jobs:
       - name: Assemble Unified Kernel Image (UKIFY)
         run: |
           sudo apt-get update && sudo apt-get install -y systemd-ukify
-          echo "root=ostree ostree=latest quiet rw intel_iommu=on slab_nomerge module.sig_enforce=1" > build-uki/cmdline.txt
+          echo "quiet rw intel_iommu=on slab_nomerge module.sig_enforce=1" > build-uki/cmdline.txt
           ukify build \
             --linux=build-uki/vmlinuz \
             --initrd=build-uki/initramfs.img \
@@ -72,11 +74,9 @@ jobs:
           MOK_PRIV: ${{ secrets.ERMETE_MOK_PRIV }}
           MOK_CERT: ${{ secrets.ERMETE_MOK_CERT }}
         run: |
-          # Scrittura diretta del payload PEM testuale nativo
           printf "%s\n" "$MOK_PRIV" > build-uki/MOK.key
           printf "%s\n" "$MOK_CERT" > build-uki/MOK.crt
           
-          # Validazione integrità strutturale PEM
           if ! grep -q "BEGIN PRIVATE KEY" build-uki/MOK.key || ! grep -q "BEGIN CERTIFICATE" build-uki/MOK.crt; then
             echo "CRITICAL: Fallimento ricostruzione file PEM. L'header atteso non è presente nei file generati." >&2
             exit 1
@@ -85,7 +85,6 @@ jobs:
           sudo apt-get install -y sbsigntool
           sbsign --key build-uki/MOK.key --cert build-uki/MOK.crt --output build-uki/vmlinuz-ermete.efi build-uki/vmlinuz-ermete-unsigned.efi
           
-          # Zeroization
           rm -f build-uki/MOK.key build-uki/MOK.crt build-uki/vmlinuz-ermete-unsigned.efi
 
       - name: Inject Signed UKI & Build Final eBPF Layer
