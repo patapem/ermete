@@ -1,9 +1,8 @@
-# CHANGELOG GLOBALE APPLICATO:
+# CHANGELOG GLOBALE:
 # 1. Risolto errore di sintassi YAML sull'escaping di --os-release.
 # 2. Sostituiti i blocchi heredoc non supportati nativamente dal parser YAML/Bash.
-# 3. Introdotta la sanificazione cruda `tr -d '\n\r '` per purgare gli artefatti CRLF derivati da Windows/Clipboard sui secret MOK.
-# 4. Aggiunto blocco condizionale `grep -q "BEGIN"` per validare l'header PEM in ottica fail-fast.
-# 5. Aggiunto il ramo `testing-uki` ai trigger di esecuzione (on: push: branches).
+# 3. Aggiunto il ramo `testing-uki` ai trigger di esecuzione.
+# 4. [ATTUALE] Rimozione totale della logica di decodifica Base64. I secret vengono trascritti direttamente come testo RAW PEM nativo.
 
 name: Build and Push Fedora Atomic OS
 on:
@@ -74,17 +73,20 @@ jobs:
           MOK_PRIV: ${{ secrets.ERMETE_MOK_PRIV }}
           MOK_CERT: ${{ secrets.ERMETE_MOK_CERT }}
         run: |
-          printf "%s" "$MOK_PRIV" | tr -d '\n\r ' | base64 -d > build-uki/MOK.key
-          printf "%s" "$MOK_CERT" | tr -d '\n\r ' | base64 -d > build-uki/MOK.crt
+          # Scrittura diretta del payload PEM testuale nativo
+          printf "%s\n" "$MOK_PRIV" > build-uki/MOK.key
+          printf "%s\n" "$MOK_CERT" > build-uki/MOK.crt
           
-          if ! grep -q "BEGIN" build-uki/MOK.key; then
-            echo "CRITICAL: Decodifica fallita. MOK.key non contiene un header PEM valido." >&2
+          # Validazione integrità strutturale PEM
+          if ! grep -q "BEGIN PRIVATE KEY" build-uki/MOK.key || ! grep -q "BEGIN CERTIFICATE" build-uki/MOK.crt; then
+            echo "CRITICAL: Fallimento ricostruzione file PEM. L'header atteso non è presente nei file generati." >&2
             exit 1
           fi
           
           sudo apt-get install -y sbsigntool
           sbsign --key build-uki/MOK.key --cert build-uki/MOK.crt --output build-uki/vmlinuz-ermete.efi build-uki/vmlinuz-ermete-unsigned.efi
           
+          # Zeroization
           rm -f build-uki/MOK.key build-uki/MOK.crt build-uki/vmlinuz-ermete-unsigned.efi
 
       - name: Inject Signed UKI & Build Final eBPF Layer
