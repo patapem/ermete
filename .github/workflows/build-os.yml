@@ -111,10 +111,17 @@ jobs:
           MOK_PRIV: ${{ secrets.ERMETE_MOK_PRIV }}
           MOK_CERT: ${{ secrets.ERMETE_MOK_CERT }}
         run: |
-          echo "$MOK_PRIV" > build-uki/MOK.key
-          echo "$MOK_CERT" > build-uki/MOK.crt
+          printf "%s" "$MOK_PRIV" | tr -d '\n\r ' | base64 -d > build-uki/MOK.key
+          printf "%s" "$MOK_CERT" | tr -d '\n\r ' | base64 -d > build-uki/MOK.crt
+          
+          if ! grep -q "BEGIN" build-uki/MOK.key; then
+            echo "CRITICAL: Decodifica fallita. MOK.key non contiene un header PEM valido." >&2
+            exit 1
+          fi
+          
           sudo apt-get install -y sbsigntool
           sbsign --key build-uki/MOK.key --cert build-uki/MOK.crt --output build-uki/vmlinuz-ermete.efi build-uki/vmlinuz-ermete-unsigned.efi
+          
           rm -f build-uki/MOK.key build-uki/MOK.crt build-uki/vmlinuz-ermete-unsigned.efi
 
       - name: Inject Signed UKI & Build Final eBPF Layer
