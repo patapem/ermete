@@ -2,6 +2,7 @@
 # CHANGELOG: Refactoring applicato. Iniezione statica kargs 'ostree=latest'. Disabilitazione client-side dracut. Integrazione systemd-boot.
 # CHANGELOG (Fix 1): Aggiunto --setopt=strict=0 per DNF.
 # CHANGELOG (Fix 2): Mantenimento dei pacchetti grub2-* per preservare l'albero delle dipendenze di shim-x64. L'inibizione di GRUB è delegata a systemd-boot.
+# CHANGELOG (Fix 3): Sostituzione sintassi heredoc 'COPY <<EOF' con 'RUN cat <<EOF >' per compatibilità con il parser Podman/Buildah in CI.
 
 FROM quay.io/fedora/fedora-bootc:43 AS core
 
@@ -42,9 +43,8 @@ RUN rm -f /usr/lib/kernel/install.d/50-dracut.install && \
 
 # 4. Configurazione Bootloader e Kargs
 RUN echo 'BOOTLOADER="systemd-boot"' > /etc/sysconfig/bootloader && \
-    mkdir -p /usr/lib/bootc/kargs.d/
-
-COPY <<EOF /usr/lib/bootc/kargs.d/10-ermete-uki.toml
+    mkdir -p /usr/lib/bootc/kargs.d/ && \
+    cat <<EOF > /usr/lib/bootc/kargs.d/10-ermete-uki.toml
 kargs = ["quiet", "splash", "root=ostree", "ostree=latest", "ro"]
 match-architectures = ["x86_64"]
 EOF
