@@ -1,13 +1,18 @@
 name: Build and Inject Ermete OS (qcow2)
 
 on:
-  workflow_dispatch: # Permette di avviare il workflow manualmente
-  push:
+  workflow_dispatch: # Mantiene il pulsante manuale per le emergenze
+  workflow_run:
+    workflows: ["Build and Push Fedora Atomic OS"] # Sostituisci questo con il 'name' esatto del file build-os.yml
+    types:
+      - completed # Si avvia solo quando l'altro ha finito
     branches:
-      - testing-uki # Avvia automaticamente quando pushi su questo branch
+      - testing-uki # Si avvia solo se l'altro workflow girava su questo branch
 
 jobs:
   build-and-inject:
+    # Esegue questo job SOLO se il workflow precedente ha avuto successo (evita di generare dischi se il container è fallito)
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
     permissions:
       packages: read
@@ -22,18 +27,22 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y podman libguestfs-tools
 
-      - name: Login al GitHub Container Registry come Root (Per Podman)
+      - name: Login al GitHub Container Registry come Root
         run: |
-          # Eseguiamo il login direttamente con sudo podman per garantire che
-          # l'ambiente di root (usato da bootc-image-builder) abbia i token corretti.
           echo "${{ secrets.GITHUB_TOKEN }}" | sudo podman login ghcr.io -u ${{ github.actor }} --password-stdin
 
       - name: Build qcow2 tramite bootc-image-builder
         run: |
           mkdir -p output
           
-          # Estrae l'hash corto del commit per puntare all'immagine esatta
-          SHORT_SHA=$(echo ${{ github.sha }} | cut -c1-7)
+          # Gestione dinamica dell'hash: se lanciato da un altro workflow prende l'hash di quello, altrimenti prende quello corrente
+          if [ "${{ github.event_name }}" == "workflow_run" ]; then
+            FULL_SHA="${{ github.event.workflow_run.head_sha }}"
+          else
+            FULL_SHA="${{ github.sha }}"
+          fi
+          
+          SHORT_SHA=$(echo $FULL_SHA | cut -c1-7)
           IMAGE_REF="ghcr.io/patapem/ermete:$SHORT_SHA"
           
           echo "========================================="
@@ -58,34 +67,27 @@ jobs:
           mkdir -p /tmp/guest
           mkdir -p /tmp/extracted
           
-          # Montiamo solo la partizione 4 (BTRFS Root) in sola lettura (--ro)
-          # libguestfs mappa il primo disco virtuale come /dev/sda
+          # Montaggio Root (BTRFS) in sola lettura
           sudo guestmount -a output/qcow2/disk.qcow2 -m /dev/sda4 --ro /tmp/guest
           
-          echo "Cerca e copia systemd-boot..."
+          echo "Estrazione file..."
           sudo find /tmp/guest/ -path "*/usr/lib/systemd/boot/efi/systemd-bootx64.efi" -exec cp {} /tmp/extracted/BOOTX64.EFI \;
-          
-          echo "Cerca e copia l'UKI..."
           sudo find /tmp/guest/ -name "vmlinuz-ermete.efi" -exec cp {} /tmp/extracted/vmlinuz-ermete.efi \;
           
-          # Smontiamo la Root in modo pulito
           sudo guestunmount /tmp/guest
           
           echo "========================================="
           echo "4. Iniezione nella partizione EFI..."
           echo "========================================="
-          # Montiamo solo la partizione 2 (FAT32 EFI) in lettura/scrittura
+          # Montaggio EFI (FAT32) in lettura/scrittura
           sudo guestmount -a output/qcow2/disk.qcow2 -m /dev/sda2 /tmp/guest
           
-          echo "Creazione struttura directory UEFI di fallback..."
           sudo mkdir -p /tmp/guest/EFI/BOOT
           sudo mkdir -p /tmp/guest/EFI/Linux
           
-          echo "Scrittura dei file estratti nella EFI..."
           sudo cp /tmp/extracted/BOOTX64.EFI /tmp/guest/EFI/BOOT/
           sudo cp /tmp/extracted/vmlinuz-ermete.efi /tmp/guest/EFI/Linux/
           
-          echo "Sincronizzazione e smontaggio sicuro..."
           sudo sync
           sudo guestunmount /tmp/guest
           
