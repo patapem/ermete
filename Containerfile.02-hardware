@@ -1,6 +1,6 @@
 # Ermete OS: Containerfile.02-hardware
-# CHANGELOG: Integrazione TPM2, abilitazione ComposeFS transient, forcing bootupd su systemd-boot, tuning dracut pipeline.
-# CHANGELOG (Fix): Rimossa istruzione 'layout=ostree'. Ripristinato il comportamento kernel-install di default per permettere la generazione BLS Type-1 inibendo il crash 'can_soft_reboot'.
+# CHANGELOG: Integrazione TPM2, abilitazione ComposeFS transient, tuning dracut pipeline.
+# CHANGELOG (Fix): Forzato bootloader="none" per bypassare bootupd durante la generazione del qcow2 e delegare l'iniezione UEFI allo script post-build.
 
 FROM localhost/core:latest AS hardware
 
@@ -19,6 +19,8 @@ RUN echo -e "[composefs]\nenabled = yes\n[root]\ntransient = true" > /etc/ostree
 # 3. Tuning Initramfs per Generazione in Pipeline CI
 RUN echo -e "hostonly=\"no\"\ncompress=\"zstd\"\nadd_dracutmodules+=\" ostree systemd tpm2-tss \"\nomit_dracutmodules+=\" rescue \"" > /etc/dracut.conf.d/50-ermete-uki.conf
 
-# 4. Direttive bootc per systemd-boot
+# 4. Direttive bootc per inibizione bootloader
+# Essendo un'immagine basata su UKI, disattiviamo la gestione nativa del bootloader
+# Questo previene il crash di osbuild/bootc-image-builder per la mancanza di bootupd.
 RUN mkdir -p /usr/lib/bootc/install && \
-    echo -e "[install]\nbootloader = \"systemd\"" > /usr/lib/bootc/install/00-ermete-bootloader.toml
+    echo -e "[install]\nbootloader = \"none\"" > /usr/lib/bootc/install/00-ermete-bootloader.toml
