@@ -1,10 +1,7 @@
 # Ermete OS: Containerfile.01-core
-# CHANGELOG: Refactoring applicato. Iniezione statica kargs 'ostree=latest'. Disabilitazione client-side dracut. Integrazione systemd-boot.
-# CHANGELOG (Fix 1): Aggiunto --setopt=strict=0 per DNF.
-# CHANGELOG (Fix 2): Mantenimento dei pacchetti grub2-* per preservare l'albero delle dipendenze di shim-x64.
-# CHANGELOG (Fix 3): Sostituzione heredoc con echo -e per bypass del troncamento parser.
-# CHANGELOG (Fix 4): Iniezione certificato MOK (DER), script di arruolamento e demone di sincronizzazione UKI.
-# CHANGELOG (Fix 5): Rimossa iniezione hardcoded "ostree=latest" da kargs.d per prevenire l'assertion crash in libostree durante il bootc switch. La cmdline è demandata all'UKI.
+# CHANGELOG: Refactoring applicato. Disabilitazione client-side dracut. Integrazione systemd-boot.
+# CHANGELOG (Fix 1-5): Applicate patch DNF, Shim-x64, bypass CI parser, Iniezione MOK, rimozione kargs.
+# CHANGELOG (Fix 6): Rimossa direttiva legacy BOOTLOADER="systemd-boot" da /etc/sysconfig/bootloader. Neutralizza l'assertion crash upstream in libostree (can_soft_reboot) durante il bootc switch.
 
 FROM quay.io/fedora/fedora-bootc:43 AS core
 
@@ -42,11 +39,7 @@ RUN rm -f /usr/lib/kernel/install.d/50-dracut.install && \
     ln -s /dev/null /usr/lib/kernel/install.d/50-dracut.install && \
     ln -s /dev/null /usr/lib/kernel/install.d/51-dracut-rescue.install
 
-# 4. Configurazione Bootloader
-# RIMOSSO: La generazione di /usr/lib/bootc/kargs.d/10-ermete-uki.toml
-RUN echo 'BOOTLOADER="systemd-boot"' > /etc/sysconfig/bootloader
-
-# 5. Ottimizzazione Sistema e Sicurezza
+# 4. Ottimizzazione Sistema e Sicurezza
 COPY zram-generator.conf /etc/systemd/zram-generator.conf
 COPY 99-hardening-performance.conf /etc/sysctl.d/99-hardening-performance.conf
 COPY nftables.conf /etc/sysconfig/nftables.conf
@@ -55,7 +48,7 @@ RUN systemctl enable nftables.service && \
     systemctl enable systemd-resolved.service && \
     sed -i 's/^SELINUX=.*/SELINUX=enforcing/' /etc/selinux/config
 
-# 6. Iniezione Asset Custom: MOK e UKI Sync Daemon
+# 5. Iniezione Asset Custom: MOK e UKI Sync Daemon
 COPY etc/pki/ermeteos/ErmeteOS-MOK.der /etc/pki/ermeteos/ErmeteOS-MOK.der
 COPY usr/local/bin/ermete-enroll-mok.sh /usr/local/bin/ermete-enroll-mok.sh
 COPY usr/local/bin/ermete-uki-sync.sh /usr/local/bin/ermete-uki-sync.sh
@@ -64,7 +57,7 @@ COPY etc/systemd/system/ermete-uki-sync.service /etc/systemd/system/ermete-uki-s
 RUN chmod +x /usr/local/bin/ermete-enroll-mok.sh /usr/local/bin/ermete-uki-sync.sh && \
     systemctl enable ermete-uki-sync.service
 
-# 7. Sicurezza Supply Chain e Utenti
+# 6. Sicurezza Supply Chain e Utenti
 RUN mkdir -p /etc/containers/registries.d && \
     echo -e "docker:\n  ghcr.io/patapem/ermete:\n    use-sigstore-attachments: true" > /etc/containers/registries.d/ermete.yaml && \
     useradd -m -G wheel -s /bin/bash ermete && \
