@@ -1,7 +1,6 @@
 # Ermete OS: Containerfile.01-core
-# CHANGELOG: Refactoring applicato. Disabilitazione client-side dracut. Integrazione systemd-boot.
-# CHANGELOG (Fix 1-5): Applicate patch DNF, Shim-x64, bypass CI parser, Iniezione MOK, rimozione kargs.
-# CHANGELOG (Fix 6): Rimossa direttiva legacy BOOTLOADER="systemd-boot" da /etc/sysconfig/bootloader. Neutralizza l'assertion crash upstream in libostree (can_soft_reboot) durante il bootc switch.
+# CHANGELOG: Disabilitazione client-side dracut. Integrazione systemd-boot. Iniezione MOK.
+# CHANGELOG (Fix): Reintrodotta la generazione di kargs.d. I parametri sono fittizi ai fini dell'UKI, ma strutturalmente obbligatori per bypassare l'asserzione 'can_soft_reboot' di libostree.
 
 FROM quay.io/fedora/fedora-bootc:43 AS core
 
@@ -39,7 +38,11 @@ RUN rm -f /usr/lib/kernel/install.d/50-dracut.install && \
     ln -s /dev/null /usr/lib/kernel/install.d/50-dracut.install && \
     ln -s /dev/null /usr/lib/kernel/install.d/51-dracut-rescue.install
 
-# 4. Ottimizzazione Sistema e Sicurezza
+# 4. Configurazione Kargs fittizi per libostree
+RUN mkdir -p /usr/lib/bootc/kargs.d/ && \
+    echo -e 'kargs = ["quiet", "root=ostree", "ostree=latest"]\nmatch-architectures = ["x86_64"]' > /usr/lib/bootc/kargs.d/10-ermete-uki.toml
+
+# 5. Ottimizzazione Sistema e Sicurezza
 COPY zram-generator.conf /etc/systemd/zram-generator.conf
 COPY 99-hardening-performance.conf /etc/sysctl.d/99-hardening-performance.conf
 COPY nftables.conf /etc/sysconfig/nftables.conf
@@ -48,7 +51,7 @@ RUN systemctl enable nftables.service && \
     systemctl enable systemd-resolved.service && \
     sed -i 's/^SELINUX=.*/SELINUX=enforcing/' /etc/selinux/config
 
-# 5. Iniezione Asset Custom: MOK e UKI Sync Daemon
+# 6. Iniezione Asset Custom: MOK e UKI Sync Daemon
 COPY etc/pki/ermeteos/ErmeteOS-MOK.der /etc/pki/ermeteos/ErmeteOS-MOK.der
 COPY usr/local/bin/ermete-enroll-mok.sh /usr/local/bin/ermete-enroll-mok.sh
 COPY usr/local/bin/ermete-uki-sync.sh /usr/local/bin/ermete-uki-sync.sh
@@ -57,7 +60,7 @@ COPY etc/systemd/system/ermete-uki-sync.service /etc/systemd/system/ermete-uki-s
 RUN chmod +x /usr/local/bin/ermete-enroll-mok.sh /usr/local/bin/ermete-uki-sync.sh && \
     systemctl enable ermete-uki-sync.service
 
-# 6. Sicurezza Supply Chain e Utenti
+# 7. Sicurezza Supply Chain e Utenti
 RUN mkdir -p /etc/containers/registries.d && \
     echo -e "docker:\n  ghcr.io/patapem/ermete:\n    use-sigstore-attachments: true" > /etc/containers/registries.d/ermete.yaml && \
     useradd -m -G wheel -s /bin/bash ermete && \
