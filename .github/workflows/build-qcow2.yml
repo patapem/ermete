@@ -22,24 +22,28 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y podman libguestfs-tools
 
-      - name: Login al GitHub Container Registry (GHCR)
-        uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Login al GitHub Container Registry come Root (Per Podman)
+        run: |
+          # Eseguiamo il login direttamente con sudo podman per garantire che
+          # l'ambiente di root (usato da bootc-image-builder) abbia i token corretti.
+          echo "${{ secrets.GITHUB_TOKEN }}" | sudo podman login ghcr.io -u ${{ github.actor }} --password-stdin
 
       - name: Build qcow2 tramite bootc-image-builder
         run: |
           mkdir -p output
-          # Estrae la prima parte dell'hash del commit per puntare all'immagine corretta
+          
+          # Estrae l'hash corto del commit per puntare all'immagine esatta
           SHORT_SHA=$(echo ${{ github.sha }} | cut -c1-7)
           IMAGE_REF="ghcr.io/patapem/ermete:$SHORT_SHA"
           
-          echo "Scaricamento dell'immagine OCI locale in corso..."
+          echo "========================================="
+          echo "1. Scaricamento dell'immagine OCI in locale: $IMAGE_REF"
+          echo "========================================="
           sudo podman pull $IMAGE_REF
           
-          echo "Avvio build del disco partendo da $IMAGE_REF..."
+          echo "========================================="
+          echo "2. Avvio build del disco qcow2 tramite osbuild"
+          echo "========================================="
           sudo podman run --rm --privileged \
             -v $(pwd)/output:/output \
             -v /var/lib/containers/storage:/var/lib/containers/storage \
@@ -48,7 +52,9 @@ jobs:
 
       - name: Iniezione Bootloader e UKI (Day-1 Automation)
         run: |
-          echo "Montaggio del disco qcow2 in corso..."
+          echo "========================================="
+          echo "3. Montaggio del disco qcow2 in corso..."
+          echo "========================================="
           mkdir -p /tmp/guest
           # Il flag -i ispeziona il disco e monta automaticamente Root, Boot ed EFI
           sudo guestmount -a output/qcow2/disk.qcow2 -i /tmp/guest
