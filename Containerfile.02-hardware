@@ -19,5 +19,6 @@ RUN echo -e "[composefs]\nenabled = yes\n[root]\ntransient = true" > /etc/ostree
 # 3. Tuning Initramfs per Generazione in Pipeline CI
 RUN echo -e "hostonly=\"no\"\ncompress=\"zstd\"\nadd_dracutmodules+=\" ostree systemd tpm2-tss \"\nomit_dracutmodules+=\" rescue \"" > /etc/dracut.conf.d/50-ermete-uki.conf
 
-# 4. Direttive bootupd per systemd-boot
-RUN echo -e "[install.bootupd]\nbackend = \"systemd-boot\"\n[install]\nbootloader = \"systemd-boot\"" > /usr/lib/bootc/install/00-ermete-bootloader.toml
+# 4. Direttive bootc per systemd-boot
+RUN mkdir -p /usr/lib/bootc/install && \
+    echo -e "[install]\nbootloader = \"systemd\"" > /usr/lib/bootc/install/00-ermete-bootloader.toml
