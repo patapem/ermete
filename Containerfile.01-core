@@ -50,7 +50,6 @@ COPY nftables.conf /etc/sysconfig/nftables.conf
 
 RUN systemctl enable nftables.service && \
     systemctl enable systemd-resolved.service && \
-    systemctl enable bootupd.socket && \
     sed -i 's/^SELINUX=.*/SELINUX=enforcing/' /etc/selinux/config
 
 # 6. Iniezione Asset Custom: MOK e UKI Sync Daemon
