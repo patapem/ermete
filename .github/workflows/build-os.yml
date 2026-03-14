@@ -1,8 +1,16 @@
+# CHANGELOG GLOBALE APPLICATO:
+# 1. Risolto errore di sintassi YAML sull'escaping di --os-release.
+# 2. Sostituiti i blocchi heredoc non supportati nativamente dal parser YAML/Bash.
+# 3. Introdotta la sanificazione cruda `tr -d '\n\r '` per purgare gli artefatti CRLF derivati da Windows/Clipboard sui secret MOK.
+# 4. Aggiunto blocco condizionale `grep -q "BEGIN"` per validare l'header PEM in ottica fail-fast.
+# 5. Aggiunto il ramo `testing-uki` ai trigger di esecuzione (on: push: branches).
+
 name: Build and Push Fedora Atomic OS
 on:
   push:
     branches: 
       - "main"
+      - "refactoring-enterprise"
       - "testing-uki"
   schedule:
     - cron: '0 2 * * *'
@@ -61,51 +69,6 @@ jobs:
             --os-release='NAME="Ermete OS" VERSION_ID="1.0" ID=ermeteos' \
             --output=build-uki/vmlinuz-ermete-unsigned.efi
 
-      - name: Inject Keys and Sign UKI
-        env:
-          MOK_PRIV: ${{ secrets.ERMETE_MOK_PRIV }}
-          MOK_CERT: ${{ secrets.ERMETE_MOK_CERT }}
-        run: |
-          echo "$MOK_PRIV" | base64 -d > build-uki/MOK.key
-          echo "$MOK_CERT" | base64 -d > build-uki/MOK.crt
-          sudo apt-get install -y sbsigntool
-          sbsign --key build-uki/MOK.key --cert build-uki/MOK.crt --output build-uki/vmlinuz-ermete.efi build-uki/vmlinuz-ermete-unsigned.efi
-          rm -f build-uki/MOK.key build-uki/MOK.crt build-uki/vmlinuz-ermete-unsigned.efi
-
-      - name: Inject Signed UKI & Build Final eBPF Layer
-        run: |
-          echo "FROM localhost/gui:latest" > Containerfile.final
-          echo "COPY ./build-uki/vmlinuz-ermete.efi /usr/lib/modules/vmlinuz-ermete.efi" >> Containerfile.final
-          podman build -t localhost/gui-signed:latest -f Containerfile.final .
-          sed -i 's|FROM localhost/gui:latest|FROM localhost/gui-signed:latest|' Containerfile.04-ebpf
-          podman build \
-            -t ghcr.io/${{ env.IMAGE_NAME }}:latest \
-            -t ghcr.io/${{ env.IMAGE_NAME }}:${{ steps.tags.outputs.sha_short }} \
-            -t ghcr.io/${{ env.IMAGE_NAME }}:${{ steps.tags.outputs.date_tag }} \
-            -f Containerfile.04-ebpf .
-
-      - name: Login to GitHub Container Registry
-        uses: redhat-actions/podman-login@v1
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Push OS Image
-        run: |
-          podman push ghcr.io/${{ env.IMAGE_NAME }}:latest
-          podman push ghcr.io/${{ env.IMAGE_NAME }}:${{ steps.tags.outputs.sha_short }}
-          podman push ghcr.io/${{ env.IMAGE_NAME }}:${{ steps.tags.outputs.date_tag }}
-
-      - name: Install Cosign & Sign Image
-        uses: sigstore/cosign-installer@v3.5.0
-
-      - name: Sign the Published Image
-        env:
-          COSIGN_EXPERIMENTAL: "true"
-        run: |
-          cosign sign --yes ghcr.io/${{ env.IMAGE_NAME }}:latest
-          cosign sign --yes ghcr.io/${{ env.IMAGE_NAME }}:${{ steps.tags.outputs.sha_short }}
       - name: Inject Keys and Sign UKI
         env:
           MOK_PRIV: ${{ secrets.ERMETE_MOK_PRIV }}
