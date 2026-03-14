@@ -1,6 +1,6 @@
 # Ermete OS: Containerfile.01-core
-# CHANGELOG: Disabilitazione client-side dracut. Integrazione systemd-boot. Iniezione MOK.
-# CHANGELOG (Fix): Reintrodotta la generazione di kargs.d. I parametri sono fittizi ai fini dell'UKI, ma strutturalmente obbligatori per bypassare l'asserzione 'can_soft_reboot' di libostree.
+# CHANGELOG: Disabilitazione dracut client. Iniezione MOK.
+# CHANGELOG (Fix): Rimossi kargs core/ostree manuali per prevenire conflitti con la generazione automatica BLS di bootc.
 
 FROM quay.io/fedora/fedora-bootc:43 AS core
 
@@ -38,9 +38,9 @@ RUN rm -f /usr/lib/kernel/install.d/50-dracut.install && \
     ln -s /dev/null /usr/lib/kernel/install.d/50-dracut.install && \
     ln -s /dev/null /usr/lib/kernel/install.d/51-dracut-rescue.install
 
-# 4. Configurazione Kargs fittizi per libostree
+# 4. Configurazione Kargs Standard
 RUN mkdir -p /usr/lib/bootc/kargs.d/ && \
-    echo -e 'kargs = ["quiet", "root=ostree", "ostree=latest"]\nmatch-architectures = ["x86_64"]' > /usr/lib/bootc/kargs.d/10-ermete-uki.toml
+    echo -e 'kargs = ["quiet"]\nmatch-architectures = ["x86_64"]' > /usr/lib/bootc/kargs.d/10-ermete-uki.toml
 
 # 5. Ottimizzazione Sistema e Sicurezza
 COPY zram-generator.conf /etc/systemd/zram-generator.conf
