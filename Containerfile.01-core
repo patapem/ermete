@@ -1,6 +1,6 @@
 # Ermete OS: Containerfile.01-core
-# CHANGELOG: Disabilitazione dracut client. Iniezione MOK.
-# CHANGELOG (Fix): Rimossi kargs core/ostree manuali per prevenire conflitti con la generazione automatica BLS di bootc.
+# CHANGELOG: Disabilitazione dracut client. Iniezione MOK. Rimossi kargs ostree manuali.
+# CHANGELOG (Fix): Integrazione di bootupd e attivazione del suo socket. Requisito obbligatorio per permettere a osbuild/bootc-image-builder di installare il bootloader systemd nel disco qcow2.
 
 FROM quay.io/fedora/fedora-bootc:43 AS core
 
