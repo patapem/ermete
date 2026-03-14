@@ -1,4 +1,3 @@
-# CHANGELOG: Fusione della pipeline di build OCI con logica UKI: estrazione initramfs, build systemd-ukify, firma sbsign MOK e iniezione nel layer OCI.
 name: Build and Push Fedora Atomic OS
 on:
   push:
@@ -48,7 +47,7 @@ jobs:
           podman run --rm --privileged -v $(pwd)/build-uki:/out localhost/gui:latest dracut --nomdadmconf --nolvmconf --no-hostonly -f /out/initramfs.img ${KVER}
           podman cp ${CONTAINER_ID}:/usr/lib/modules/${KVER}/vmlinuz build-uki/vmlinuz
           podman cp ${CONTAINER_ID}:/usr/lib/systemd/boot/efi/linuxx64.efi.stub build-uki/linuxx64.efi.stub
-          podman rm ${CONTAINER_ID} # [cite: 98, 99, 101, 102]
+          podman rm ${CONTAINER_ID}
 
       - name: Assemble Unified Kernel Image (UKIFY)
         run: |
@@ -59,8 +58,8 @@ jobs:
             --initrd=build-uki/initramfs.img \
             --cmdline=@build-uki/cmdline.txt \
             --stub=build-uki/linuxx64.efi.stub \
-            --os-release="NAME=\"Ermete OS\" VERSION_ID=\"1.0\" ID=ermeteos" \
-            --output=build-uki/vmlinuz-ermete-unsigned.efi # [cite: 103, 104, 105]
+            --os-release='NAME="Ermete OS" VERSION_ID="1.0" ID=ermeteos' \
+            --output=build-uki/vmlinuz-ermete-unsigned.efi
 
       - name: Inject Keys and Sign UKI
         env:
@@ -71,37 +70,36 @@ jobs:
           echo "$MOK_CERT" > build-uki/MOK.crt
           sudo apt-get install -y sbsigntool
           sbsign --key build-uki/MOK.key --cert build-uki/MOK.crt --output build-uki/vmlinuz-ermete.efi build-uki/vmlinuz-ermete-unsigned.efi
-          rm -f build-uki/MOK.key build-uki/MOK.crt build-uki/vmlinuz-ermete-unsigned.efi # [cite: 106, 107, 109, 110]
+          rm -f build-uki/MOK.key build-uki/MOK.crt build-uki/vmlinuz-ermete-unsigned.efi
 
       - name: Inject Signed UKI & Build Final eBPF Layer
         run: |
-          cat <<EOF > Containerfile.final
-          FROM localhost/gui:latest
-          COPY ./build-uki/vmlinuz-ermete.efi /usr/lib/modules/vmlinuz-ermete.efi
-          EOF
+          echo "FROM localhost/gui:latest" > Containerfile.final
+          echo "COPY ./build-uki/vmlinuz-ermete.efi /usr/lib/modules/vmlinuz-ermete.efi" >> Containerfile.final
           podman build -t localhost/gui-signed:latest -f Containerfile.final .
           sed -i 's|FROM localhost/gui:latest|FROM localhost/gui-signed:latest|' Containerfile.04-ebpf
           podman build \
             -t ghcr.io/${{ env.IMAGE_NAME }}:latest \
             -t ghcr.io/${{ env.IMAGE_NAME }}:${{ steps.tags.outputs.sha_short }} \
             -t ghcr.io/${{ env.IMAGE_NAME }}:${{ steps.tags.outputs.date_tag }} \
-            -f Containerfile.04-ebpf . # [cite: 112]
+            -f Containerfile.04-ebpf .
 
       - name: Login to GitHub Container Registry
         uses: redhat-actions/podman-login@v1
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
-          [cite_start]password: ${{ secrets.GITHUB_TOKEN }} # [cite: 95, 96]
+          password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Push OS Image
         run: |
           podman push ghcr.io/${{ env.IMAGE_NAME }}:latest
           podman push ghcr.io/${{ env.IMAGE_NAME }}:${{ steps.tags.outputs.sha_short }}
-          podman push ghcr.io/${{ env.IMAGE_NAME }}:${{ steps.tags.outputs.date_tag }} # [cite: 113]
+          podman push ghcr.io/${{ env.IMAGE_NAME }}:${{ steps.tags.outputs.date_tag }}
 
       - name: Install Cosign & Sign Image
         uses: sigstore/cosign-installer@v3.5.0
+
       - name: Sign the Published Image
         env:
           COSIGN_EXPERIMENTAL: "true"
