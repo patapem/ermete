@@ -36,8 +36,11 @@ jobs:
           SHORT_SHA=$(echo ${{ github.sha }} | cut -c1-7)
           IMAGE_REF="ghcr.io/patapem/ermete:$SHORT_SHA"
           
+          echo "Scaricamento dell'immagine OCI locale in corso..."
+          sudo podman pull $IMAGE_REF
+          
           echo "Avvio build del disco partendo da $IMAGE_REF..."
-          sudo podman run --rm --privileged --pull=newer \
+          sudo podman run --rm --privileged \
             -v $(pwd)/output:/output \
             -v /var/lib/containers/storage:/var/lib/containers/storage \
             quay.io/centos-bootc/bootc-image-builder:latest \
