@@ -1,6 +1,7 @@
 # Ermete OS: Containerfile.02-hardware
 # CHANGELOG: Integrazione TPM2, abilitazione ComposeFS transient, forcing bootupd su systemd-boot, tuning dracut pipeline.
 # CHANGELOG (Fix 1): Sostituzione heredoc con stringhe echo -e per bypass del parser OCI su multiriga.
+# CHANGELOG (Fix 2): Rimossa iniezione di 'uki.conf' per ripristinare il corretto flusso di kernel-install lato client e neutralizzare il crash dell'asserzione in libostree.
 
 FROM localhost/core:latest AS hardware
 
@@ -27,5 +28,3 @@ RUN mkdir -p /usr/lib/kernel && \
     echo "layout=ostree" > /usr/lib/kernel/install.conf && \
     KVER=$(ls /usr/lib/modules/ | head -n 1) && \
     mkdir -p /usr/lib/modules/${KVER}
-
-COPY uki.conf /etc/kernel/uki.conf
