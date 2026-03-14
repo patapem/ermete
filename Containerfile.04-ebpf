@@ -14,10 +14,10 @@ RUN curl -LO https://github.com/cilium/tetragon/releases/download/v${TETRAGON_VE
     sed -i 's|/usr/local|/usr|g' usr/lib/tetragon/tetragon.conf.d/* && \
     ./install.sh && \
     cd .. && \
-    rm -rf tetragon-v${TETRAGON_VERSION}-amd64* # [cite: 171, 172]
+    rm -rf tetragon-v${TETRAGON_VERSION}-amd64*
 
 # FIX CRITICO: Allineamento dei path nel file di servizio
-RUN sed -i 's|/usr/local|/usr|g' /usr/lib/systemd/system/tetragon.service # [cite: 172]
+RUN sed -i 's|/usr/local|/usr|g' /usr/lib/systemd/system/tetragon.service
 
-RUN systemctl enable tetragon.service # [cite: 172]
-RUN bootc container lint # [cite: 172]
+RUN systemctl enable tetragon.service
+RUN bootc container lint
