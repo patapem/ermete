@@ -1,8 +1,7 @@
 # CHANGELOG GLOBALE:
-# 1-8. [Omissis per brevità: fix crittografici, MOK in RAM, SBOM locale]
-# 9. Alert Fatigue: Costrutto bash "|| echo" per tollerare i timeout di Sigstore.
-# 10. Network Security: Iniezione sonde eBPF (harden-runner) in modalità AUDIT.
-# 11. [ATTUALE] Bare-Metal Fixes: Rimossi flag dracut distruttivi (--nomdadmconf --nolvmconf), iniettato microcodice CPU, aggiornata cmdline (iommu=pt, pci=noaer, ecc.) e rinominata PKI in ISV_DB.
+# 1-9. [Omissis: fix crittografici, MOK in RAM, SBOM locale, bypass tollerante Sigstore, harden-runner v2]
+# 10. Bare-Metal Fixes: Rimossi flag dracut distruttivi (--nomdadmconf --nolvmconf), aggiornata cmdline (iommu=pt, pci=noaer, ecc.) e rinominata PKI in ISV_DB.
+# 11. [ATTUALE] Bugfix: Risolto l'errore "unrecognized arguments: --microcode" concatenando nativamente i layer del microcodice Intel/AMD direttamente nell'initramfs tramite il comando 'cat'.
 
 name: Build and Push Fedora Atomic OS
 on:
@@ -65,6 +64,9 @@ jobs:
           # Esecuzione Dracut: rimossi i flag nomdadmconf e nolvmconf per permettere l'assemblaggio dei dischi bare-metal
           podman run --rm --privileged -v $(pwd)/build-uki:/out localhost/gui:latest dracut --no-hostonly -f /out/initramfs.img ${KVER}
           
+          # CONCATENAZIONE UNIVERSALE: Fonde microcodice Intel, AMD e initramfs in un unico file letto nativamente dal kernel
+          cat build-uki/intel-ucode.img build-uki/amd-ucode.img build-uki/initramfs.img > build-uki/initramfs-final.img
+          
           podman cp ${CONTAINER_ID}:/usr/lib/modules/${KVER}/vmlinuz build-uki/vmlinuz
           podman cp ${CONTAINER_ID}:/usr/lib/systemd/boot/efi/linuxx64.efi.stub build-uki/linuxx64.efi.stub
           podman rm ${CONTAINER_ID}
@@ -76,12 +78,11 @@ jobs:
           # Aggiornata la cmdline per compatibilità bare-metal universale
           echo "quiet rw iommu=pt slab_nomerge module.sig_enforce=1 pci=noaer nmi_watchdog=0 mitigations=auto" > build-uki/cmdline.txt
           
-          # Iniettato il microcodice nel UKI prima dell'initramfs
+          # Iniettato l'initramfs fuso (che contiene già il microcodice in testa)
           ukify build \
             --linux=build-uki/vmlinuz \
-            --initrd=build-uki/initramfs.img \
+            --initrd=build-uki/initramfs-final.img \
             --cmdline=@build-uki/cmdline.txt \
-            --microcode=build-uki/intel-ucode.img,build-uki/amd-ucode.img \
             --stub=build-uki/linuxx64.efi.stub \
             --os-release='NAME="Ermete OS" VERSION_ID="1.0" ID=ermeteos' \
             --output=build-uki/vmlinuz-ermete-unsigned.efi
