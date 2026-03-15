@@ -1,9 +1,10 @@
 # CHANGELOG GLOBALE:
 # 1. Risolto errore di sintassi YAML sull'escaping di --os-release.
-# 2. Sostituiti i blocchi heredoc non supportati nativamente dal parser YAML/Bash.
+# 2. Sostituiti i blocchi heredoc non supportati nativamente.
 # 3. Rimozione totale logica decodifica Base64.
-# 4. Rimozione parametri 'root=ostree' dall'UKI per risoluzione hash dinamica.
-# 5. [ATTUALE] Sicurezza: Implementazione RAM-disk (/dev/shm) e shredding crittografico per protezione MOK_PRIV.
+# 4. Rimozione parametri 'root=ostree' dall'UKI.
+# 5. Sicurezza: Implementazione RAM-disk (/dev/shm) e shredding per protezione MOK_PRIV.
+# 6. [ATTUALE] Sicurezza: Implementazione digest pinning (SHA256) per Checkout Action e generazione SBOM tramite Syft con attestation Cosign.
 
 name: Build and Push Fedora Atomic OS
 on:
@@ -28,7 +29,8 @@ jobs:
       id-token: write
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v4
+        # Strict SHA256 pinning sostituisce il tag mutabile @v4
+        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11
 
       - name: Free up disk space
         run: |
@@ -73,7 +75,6 @@ jobs:
         run: |
           sudo apt-get update && sudo apt-get install -y sbsigntool coreutils
           
-          # Inizializza una cassaforte isolata direttamente nella memoria RAM temporanea
           SECURE_VAULT="/dev/shm/ermete-crypto-vault"
           mkdir -p "$SECURE_VAULT"
           chmod 700 "$SECURE_VAULT"
@@ -81,7 +82,6 @@ jobs:
           MOK_KEY_PATH="$SECURE_VAULT/MOK.key"
           MOK_CRT_PATH="$SECURE_VAULT/MOK.crt"
           
-          # I/O diretto: inietta i secret senza farli passare dalle variabili d'ambiente visibili
           cat << 'EOF' > "$MOK_KEY_PATH"
           ${{ secrets.ERMETE_MOK_PRIV }}
           EOF
@@ -90,25 +90,20 @@ jobs:
           ${{ secrets.ERMETE_MOK_CERT }}
           EOF
           
-          # Blocco dei permessi in sola lettura per l'utente corrente
           chmod 400 "$MOK_KEY_PATH" "$MOK_CRT_PATH"
           
-          # Validazione crittografica
           if ! grep -q "BEGIN PRIVATE KEY" "$MOK_KEY_PATH" || ! grep -q "BEGIN CERTIFICATE" "$MOK_CRT_PATH"; then
             echo "CRITICAL: Corrupted or missing cryptographic material." >&2
+            chmod 600 "$MOK_KEY_PATH" "$MOK_CRT_PATH"
             shred --iterations=3 --random-source=/dev/urandom -u -z "$MOK_KEY_PATH" "$MOK_CRT_PATH"
             exit 1
           fi
           
-          # Esecuzione firma leggendo dalla RAM
           sbsign --key "$MOK_KEY_PATH" --cert "$MOK_CRT_PATH" \
                  --output build-uki/vmlinuz-ermete.efi \
                  build-uki/vmlinuz-ermete-unsigned.efi
-                 
-           # SBLOCCO SCRITTURA: necessario affinché shred possa sovrascrivere fisicamente le celle RAM
-          chmod 600 "$MOK_KEY_PATH" "$MOK_CRT_PATH"      
           
-          # DISTRUZIONE CRITTOGRAFICA: sovrascrive le pagine RAM con dati casuali e zeri, poi distrugge il file
+          chmod 600 "$MOK_KEY_PATH" "$MOK_CRT_PATH"
           shred --iterations=3 --random-source=/dev/urandom -u -z "$MOK_KEY_PATH"
           shred --iterations=3 --random-source=/dev/urandom -u -z "$MOK_CRT_PATH"
           rm -rf "$SECURE_VAULT"
@@ -139,12 +134,25 @@ jobs:
           podman push ghcr.io/${{ env.IMAGE_NAME }}:${{ steps.tags.outputs.sha_short }}
           podman push ghcr.io/${{ env.IMAGE_NAME }}:${{ steps.tags.outputs.date_tag }}
 
-      - name: Install Cosign & Sign Image
+      - name: Install Cosign
         uses: sigstore/cosign-installer@v3.5.0
 
-      - name: Sign the Published Image
+      - name: Install Syft for SBOM Generation
+        uses: anchore/sbom-action/download-syft@dce8d4c185fa809312c9e7826315582f6e91eabe
+
+      - name: Generate and Attest Software Bill of Materials
         env:
           COSIGN_EXPERIMENTAL: "true"
         run: |
-          cosign sign --yes ghcr.io/${{ env.IMAGE_NAME }}:latest
-          cosign sign --yes ghcr.io/${{ env.IMAGE_NAME }}:${{ steps.tags.outputs.sha_short }}
+          # Recupera l'hash immutabile esatto dell'immagine appena pushatata
+          IMAGE_DIGEST=$(podman inspect --format='{{.Digest}}' ghcr.io/${{ env.IMAGE_NAME }}:${{ steps.tags.outputs.sha_short }})
+          FULL_IMAGE_URI="ghcr.io/${{ env.IMAGE_NAME }}@${IMAGE_DIGEST}"
+          
+          # Genera la distinta base in formato standard SPDX
+          syft "$FULL_IMAGE_URI" -o spdx-json > ermete-os-sbom.spdx.json
+          
+          # Firma crittograficamente l'hash esatto (non il tag latest)
+          cosign sign --yes "$FULL_IMAGE_URI"
+          
+          # Incolla la distinta base all'immagine verificando il contenuto
+          cosign attest --yes --predicate ermete-os-sbom.spdx.json --type spdx "$FULL_IMAGE_URI"
