@@ -12,8 +12,8 @@ on:
 
 jobs:
   build-and-inject:
-    # Mantenuto inibito temporaneamente finché build-os.yml non passa al verde
-    if: false
+    # RIATTIVATO: La build parte in automatico se la pipeline OS ha avuto successo
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
     permissions:
       packages: read
@@ -26,14 +26,15 @@ jobs:
       - name: Install Dependencies for Rootless Virtualization
         run: |
           sudo apt-get update
-          sudo apt-get install -y podman libguestfs-tools qemu-kvm
+          # Rimosso libguestfs-tools. Ora usiamo solo podman e KVM nativo.
+          sudo apt-get install -y podman qemu-kvm
           sudo usermod -a -G kvm $USER
 
       - name: Login to GitHub Container Registry
         run: |
           echo "${{ secrets.GITHUB_TOKEN }}" | podman login ghcr.io -u ${{ github.actor }} --password-stdin
 
-      - name: Build QCOW2 (Capability Restricted Isolation)
+      - name: Build QCOW2 (Native bootc-image-builder)
         run: |
           mkdir -p output
           
@@ -49,7 +50,8 @@ jobs:
           echo "1. Pulling local OCI image: $IMAGE_REF"
           podman pull $IMAGE_REF
           
-          echo "2. Avvio build disco osbuild (Senza --privileged)"
+          echo "2. Avvio build disco nativa (Senza --privileged e senza Guestfish hack)"
+          # bootc-image-builder gestirà la partizione EFI, BLS e OSTree in modo transazionale
           sudo podman run --rm \
             --cap-add=SYS_ADMIN \
             --cap-add=MAC_ADMIN \
@@ -59,33 +61,6 @@ jobs:
             -v /var/lib/containers/storage:/var/lib/containers/storage \
             quay.io/centos-bootc/bootc-image-builder:latest \
             build --type qcow2 --rootfs btrfs $IMAGE_REF
-
-      - name: Estrazione e Iniezione Sicura (Rootless via Guestfish)
-        run: |
-          mkdir -p /tmp/extracted
-          
-          CONTAINER_ID=$(podman create $IMAGE_REF)
-          podman cp ${CONTAINER_ID}:/usr/lib/modules/vmlinuz-ermete.efi /tmp/extracted/vmlinuz-ermete.efi
-          podman cp ${CONTAINER_ID}:/usr/lib/systemd/boot/efi/systemd-bootx64.efi /tmp/extracted/BOOTX64.EFI
-          podman rm ${CONTAINER_ID}
-          
-          export LIBGUESTFS_BACKEND=direct
-          
-          echo "Iniezione file nella partizione EFI (/dev/sda2)..."
-          guestfish -a output/qcow2/disk.qcow2 -m /dev/sda2 <<EOF
-          mkdir-p /EFI/BOOT
-          mkdir-p /EFI/Ermete
-          mkdir-p /loader/entries
-          
-          upload /tmp/extracted/BOOTX64.EFI /EFI/BOOT/BOOTX64.EFI
-          upload /tmp/extracted/vmlinuz-ermete.efi /EFI/Ermete/vmlinuz-ermete.efi
-          
-          write /loader/loader.conf "default ermete.conf\ntimeout 3\nconsole-mode max\n"
-          # Rimossa l'opzione "root=ostree" per rispettare la Discoverable Partitions Specification (DPS)
-          write /loader/entries/ermete.conf "title Ermete OS (Secure UKI)\nefi /EFI/Ermete/vmlinuz-ermete.efi\noptions quiet rw iommu=pt slab_nomerge module.sig_enforce=1 pci=noaer nmi_watchdog=0 mitigations=auto\n"
-          EOF
-          
-          echo "Disco armato in sicurezza estrema."
 
       - name: Upload Artifact (qcow2)
         uses: actions/upload-artifact@v4
