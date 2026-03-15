@@ -1,6 +1,7 @@
 # Ermete OS: Containerfile.01-core
 # CHANGELOG: Disabilitazione dracut client. Rimossi kargs ostree manuali. Integrazione bootupd.
 # CHANGELOG (Cloud-Native Fix): Sostituita iniezione MOK con ISV_DB. Implementato systemd-tmpfiles per la persistenza sicura di /var/home.
+# CHANGELOG (Bugfix): Rimossi pacchetti SELinux dalla direttiva dnf install per evitare conflitti (già preinstallati nell'immagine base bootc).
 
 FROM quay.io/fedora/fedora-bootc:43 AS core
 
@@ -28,9 +29,7 @@ RUN dnf -y remove --setopt=strict=0 \
     dracut-network \
     zram-generator \
     nftables \
-    systemd-resolved \
-    policycoreutils \
-    selinux-policy-targeted && \
+    systemd-resolved && \
     dnf clean all
 
 # 3. Prevenzione esecuzione locale dracut tramite hard-linking
