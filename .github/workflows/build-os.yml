@@ -104,6 +104,9 @@ jobs:
           sbsign --key "$MOK_KEY_PATH" --cert "$MOK_CRT_PATH" \
                  --output build-uki/vmlinuz-ermete.efi \
                  build-uki/vmlinuz-ermete-unsigned.efi
+                 
+           # SBLOCCO SCRITTURA: necessario affinché shred possa sovrascrivere fisicamente le celle RAM
+          chmod 600 "$MOK_KEY_PATH" "$MOK_CRT_PATH"      
           
           # DISTRUZIONE CRITTOGRAFICA: sovrascrive le pagine RAM con dati casuali e zeri, poi distrugge il file
           shred --iterations=3 --random-source=/dev/urandom -u -z "$MOK_KEY_PATH"
