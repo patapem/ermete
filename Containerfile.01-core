@@ -1,6 +1,6 @@
 # Ermete OS: Containerfile.01-core
-# CHANGELOG: Disabilitazione dracut client. Iniezione MOK. Rimossi kargs ostree manuali.
-# CHANGELOG (Fix): Integrazione di bootupd e attivazione del suo socket. Requisito obbligatorio per permettere a osbuild/bootc-image-builder di installare il bootloader systemd nel disco qcow2.
+# CHANGELOG: Disabilitazione dracut client. Rimossi kargs ostree manuali. Integrazione bootupd.
+# CHANGELOG (Cloud-Native Fix): Sostituita iniezione MOK con ISV_DB. Implementato systemd-tmpfiles per la persistenza sicura di /var/home.
 
 FROM quay.io/fedora/fedora-bootc:43 AS core
 
@@ -21,8 +21,8 @@ RUN dnf -y remove --setopt=strict=0 \
     systemd-boot \
     bootupd \
     sbsigntools \
+    sbctl \
     openssl \
-    mokutil \
     efibootmgr \
     composefs \
     dracut-network \
@@ -52,18 +52,21 @@ RUN systemctl enable nftables.service && \
     systemctl enable systemd-resolved.service && \
     sed -i 's/^SELINUX=.*/SELINUX=enforcing/' /etc/selinux/config
 
-# 6. Iniezione Asset Custom: MOK e UKI Sync Daemon
-COPY etc/pki/ermeteos/ErmeteOS-MOK.der /etc/pki/ermeteos/ErmeteOS-MOK.der
-COPY usr/local/bin/ermete-enroll-mok.sh /usr/local/bin/ermete-enroll-mok.sh
+# 6. Iniezione Asset Custom: ISV_DB (ex MOK) e UKI Sync Daemon
+# NOTA: Assicurati di rinominare questi file nel tuo repository locale!
+COPY etc/pki/ermeteos/ISV_DB.der /etc/pki/ermeteos/ISV_DB.der
+COPY usr/local/bin/ermete-enroll-db.sh /usr/local/bin/ermete-enroll-db.sh
 COPY usr/local/bin/ermete-uki-sync.sh /usr/local/bin/ermete-uki-sync.sh
 COPY etc/systemd/system/ermete-uki-sync.service /etc/systemd/system/ermete-uki-sync.service
 
-RUN chmod +x /usr/local/bin/ermete-enroll-mok.sh /usr/local/bin/ermete-uki-sync.sh && \
+RUN chmod +x /usr/local/bin/ermete-enroll-db.sh /usr/local/bin/ermete-uki-sync.sh && \
     systemctl enable ermete-uki-sync.service
 
-# 7. Sicurezza Supply Chain e Utenti
+# 7. Sicurezza Supply Chain, Utenti e Persistenza /var
+COPY ermete-dirs.conf /usr/lib/tmpfiles.d/ermete-dirs.conf
+
 RUN mkdir -p /etc/containers/registries.d && \
     echo -e "docker:\n  ghcr.io/patapem/ermete:\n    use-sigstore-attachments: true" > /etc/containers/registries.d/ermete.yaml && \
-    useradd -m -G wheel -s /bin/bash ermete && \
+    useradd -G wheel -s /bin/bash ermete && \
     echo "ermete:password" | chpasswd && \
     echo "root:password" | chpasswd
