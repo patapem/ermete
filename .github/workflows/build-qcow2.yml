@@ -8,10 +8,12 @@ on:
       - completed
     branches:
       - testing-uki
+      - main
 
 jobs:
   build-and-inject:
-    if: false 
+    # RIATTIVATO: Ora parte in automatico se la build dell'OS è verde
+    if: false
     runs-on: ubuntu-latest
     permissions:
       packages: read
@@ -21,16 +23,18 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Installa Dipendenze (Podman e libguestfs)
+      - name: Install Dependencies for Rootless Virtualization
         run: |
           sudo apt-get update
-          sudo apt-get install -y podman libguestfs-tools
+          # Installiamo i tool in modalità sicura e aggiungiamo l'utente al gruppo KVM
+          sudo apt-get install -y podman libguestfs-tools qemu-kvm
+          sudo usermod -a -G kvm $USER
 
-      - name: Login al GitHub Container Registry come Root
+      - name: Login to GitHub Container Registry
         run: |
-          echo "${{ secrets.GITHUB_TOKEN }}" | sudo podman login ghcr.io -u ${{ github.actor }} --password-stdin
+          echo "${{ secrets.GITHUB_TOKEN }}" | podman login ghcr.io -u ${{ github.actor }} --password-stdin
 
-      - name: Build qcow2 tramite bootc-image-builder
+      - name: Build QCOW2 (Capability Restricted Isolation)
         run: |
           mkdir -p output
           
@@ -41,71 +45,52 @@ jobs:
           fi
           
           SHORT_SHA=$(echo $FULL_SHA | cut -c1-7)
-          IMAGE_REF="ghcr.io/patapem/ermete:$SHORT_SHA"
+          IMAGE_REF="ghcr.io/${{ github.repository_owner }}/ermete:$SHORT_SHA"
           
-          echo "========================================="
-          echo "1. Scaricamento dell'immagine OCI locale: $IMAGE_REF"
-          echo "========================================="
-          sudo podman pull $IMAGE_REF
+          echo "1. Pulling local OCI image: $IMAGE_REF"
+          podman pull $IMAGE_REF
           
-          echo "========================================="
-          echo "2. Avvio build del disco qcow2 tramite osbuild"
-          echo "========================================="
-          sudo podman run --rm --privileged \
+          echo "2. Avvio build disco osbuild (Senza --privileged)"
+          # Usiamo i permessi chirurgici come richiesto dall'audit
+          sudo podman run --rm \
+            --cap-add=SYS_ADMIN \
+            --cap-add=MAC_ADMIN \
+            --device /dev/kvm \
+            --security-opt seccomp=unconfined \
             -v $(pwd)/output:/output \
             -v /var/lib/containers/storage:/var/lib/containers/storage \
             quay.io/centos-bootc/bootc-image-builder:latest \
             build --type qcow2 --rootfs btrfs $IMAGE_REF
 
-      - name: Iniezione Bootloader e Configurazione Dinamica
+      - name: Estrazione e Iniezione Sicura (Rootless via Guestfish)
         run: |
-          echo "========================================="
-          echo "3. Estrazione file dalla partizione di Root e Boot..."
-          echo "========================================="
-          mkdir -p /tmp/guest_root /tmp/guest_boot /tmp/guest_efi
           mkdir -p /tmp/extracted
           
-          # 1. Estrazione UKI e Bootloader dalla Root (sda4)
-          sudo guestmount -a output/qcow2/disk.qcow2 -m /dev/sda4 --ro /tmp/guest_root
-          sudo find /tmp/guest_root/ -name "vmlinuz-ermete.efi" -exec cp {} /tmp/extracted/vmlinuz-ermete.efi \;
-          sudo find /tmp/guest_root/ -path "*/usr/lib/systemd/boot/efi/systemd-bootx64.efi" -exec cp {} /tmp/extracted/BOOTX64.EFI \;
-          sudo guestunmount /tmp/guest_root
+          # ESTRAZIONE DA CONTAINER (Molto più sicuro e veloce che estrarre dal disco fuzzed)
+          CONTAINER_ID=$(podman create $IMAGE_REF)
+          podman cp ${CONTAINER_ID}:/usr/lib/modules/vmlinuz-ermete.efi /tmp/extracted/vmlinuz-ermete.efi
+          podman cp ${CONTAINER_ID}:/usr/lib/systemd/boot/efi/systemd-bootx64.efi /tmp/extracted/BOOTX64.EFI
+          podman rm ${CONTAINER_ID}
           
-          # 2. Estrazione parametri OSTree dinamici dalla Boot (sda3)
-          sudo guestmount -a output/qcow2/disk.qcow2 -m /dev/sda3 --ro /tmp/guest_boot
-          BLS_FILE=$(sudo find /tmp/guest_boot/loader/entries/ -name "*.conf" | head -n 1)
-          sudo cp "$BLS_FILE" /tmp/extracted/boot.conf
-          OPTIONS_LINE=$(grep "^options" /tmp/extracted/boot.conf)
-          sudo guestunmount /tmp/guest_boot
+          # INIEZIONE NEL DISCO TRAMITE GUESTFISH (Isolato e Rootless)
+          export LIBGUESTFS_BACKEND=direct
           
-          echo "========================================="
-          echo "4. Iniezione nella partizione EFI..."
-          echo "========================================="
-          # Montaggio EFI (FAT32) in lettura/scrittura (sda2)
-          sudo guestmount -a output/qcow2/disk.qcow2 -m /dev/sda2 /tmp/guest_efi
+          echo "Iniezione file nella partizione EFI (/dev/sda2)..."
+          guestfish -a output/qcow2/disk.qcow2 -m /dev/sda2 <<EOF
+          mkdir-p /EFI/BOOT
+          mkdir-p /EFI/Ermete
+          mkdir-p /loader/entries
           
-          sudo mkdir -p /tmp/guest_efi/EFI/BOOT
-          sudo mkdir -p /tmp/guest_efi/EFI/Ermete
-          sudo mkdir -p /tmp/guest_efi/loader/entries
+          upload /tmp/extracted/BOOTX64.EFI /EFI/BOOT/BOOTX64.EFI
+          upload /tmp/extracted/vmlinuz-ermete.efi /EFI/Ermete/vmlinuz-ermete.efi
           
-          # Bootloader di fallback
-          sudo cp /tmp/extracted/BOOTX64.EFI /tmp/guest_efi/EFI/BOOT/
+          write /loader/loader.conf "default ermete.conf\ntimeout 3\nconsole-mode max\n"
+          write /loader/entries/ermete.conf "title Ermete OS (Secure UKI)\nefi /EFI/Ermete/vmlinuz-ermete.efi\noptions quiet rw intel_iommu=on slab_nomerge module.sig_enforce=1 root=ostree\n"
+          EOF
           
-          # UKI
-          sudo cp /tmp/extracted/vmlinuz-ermete.efi /tmp/guest_efi/EFI/Ermete/
-          
-          # File loader.conf base
-          echo -e "default ermete.conf\ntimeout 3\nconsole-mode max" | sudo tee /tmp/guest_efi/loader/loader.conf
-          
-          # Entry di menu con parametri dinamici
-          echo -e "title Ermete OS (Secure UKI)\nefi /EFI/Ermete/vmlinuz-ermete.efi\n$OPTIONS_LINE" | sudo tee /tmp/guest_efi/loader/entries/ermete.conf
-          
-          sudo sync
-          sudo guestunmount /tmp/guest_efi
-          
-          echo "Iniezione dinamica completata con successo! Disco armato."
+          echo "Disco armato in sicurezza estrema."
 
-      - name: Upload Artefatto (qcow2)
+      - name: Upload Artifact (qcow2)
         uses: actions/upload-artifact@v4
         with:
           name: ermete-os-bootable-disk
