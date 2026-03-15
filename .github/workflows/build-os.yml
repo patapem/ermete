@@ -1,9 +1,9 @@
 # CHANGELOG GLOBALE:
 # 1. Risolto errore di sintassi YAML sull'escaping di --os-release.
 # 2. Sostituiti i blocchi heredoc non supportati nativamente dal parser YAML/Bash.
-# 3. Aggiunto il ramo `testing-uki` ai trigger di esecuzione.
-# 4. Rimozione totale della logica di decodifica Base64. I secret vengono trascritti direttamente come testo RAW PEM nativo.
-# 5. [ATTUALE] Rimozione dei parametri 'root=ostree ostree=latest' dall'UKI. L'hash verrà iniettato dinamicamente a runtime.
+# 3. Rimozione totale logica decodifica Base64.
+# 4. Rimozione parametri 'root=ostree' dall'UKI per risoluzione hash dinamica.
+# 5. [ATTUALE] Sicurezza: Implementazione RAM-disk (/dev/shm) e shredding crittografico per protezione MOK_PRIV.
 
 name: Build and Push Fedora Atomic OS
 on:
@@ -69,23 +69,47 @@ jobs:
             --os-release='NAME="Ermete OS" VERSION_ID="1.0" ID=ermeteos' \
             --output=build-uki/vmlinuz-ermete-unsigned.efi
 
-      - name: Inject Keys and Sign UKI
-        env:
-          MOK_PRIV: ${{ secrets.ERMETE_MOK_PRIV }}
-          MOK_CERT: ${{ secrets.ERMETE_MOK_CERT }}
+      - name: Inject Keys and Sign UKI (Hardened Cryptographic Vault)
         run: |
-          printf "%s\n" "$MOK_PRIV" > build-uki/MOK.key
-          printf "%s\n" "$MOK_CERT" > build-uki/MOK.crt
+          sudo apt-get update && sudo apt-get install -y sbsigntool coreutils
           
-          if ! grep -q "BEGIN PRIVATE KEY" build-uki/MOK.key || ! grep -q "BEGIN CERTIFICATE" build-uki/MOK.crt; then
-            echo "CRITICAL: Fallimento ricostruzione file PEM. L'header atteso non è presente nei file generati." >&2
+          # Inizializza una cassaforte isolata direttamente nella memoria RAM temporanea
+          SECURE_VAULT="/dev/shm/ermete-crypto-vault"
+          mkdir -p "$SECURE_VAULT"
+          chmod 700 "$SECURE_VAULT"
+          
+          MOK_KEY_PATH="$SECURE_VAULT/MOK.key"
+          MOK_CRT_PATH="$SECURE_VAULT/MOK.crt"
+          
+          # I/O diretto: inietta i secret senza farli passare dalle variabili d'ambiente visibili
+          cat << 'EOF' > "$MOK_KEY_PATH"
+          ${{ secrets.ERMETE_MOK_PRIV }}
+          EOF
+          
+          cat << 'EOF' > "$MOK_CRT_PATH"
+          ${{ secrets.ERMETE_MOK_CERT }}
+          EOF
+          
+          # Blocco dei permessi in sola lettura per l'utente corrente
+          chmod 400 "$MOK_KEY_PATH" "$MOK_CRT_PATH"
+          
+          # Validazione crittografica
+          if ! grep -q "BEGIN PRIVATE KEY" "$MOK_KEY_PATH" || ! grep -q "BEGIN CERTIFICATE" "$MOK_CRT_PATH"; then
+            echo "CRITICAL: Corrupted or missing cryptographic material." >&2
+            shred --iterations=3 --random-source=/dev/urandom -u -z "$MOK_KEY_PATH" "$MOK_CRT_PATH"
             exit 1
           fi
           
-          sudo apt-get install -y sbsigntool
-          sbsign --key build-uki/MOK.key --cert build-uki/MOK.crt --output build-uki/vmlinuz-ermete.efi build-uki/vmlinuz-ermete-unsigned.efi
+          # Esecuzione firma leggendo dalla RAM
+          sbsign --key "$MOK_KEY_PATH" --cert "$MOK_CRT_PATH" \
+                 --output build-uki/vmlinuz-ermete.efi \
+                 build-uki/vmlinuz-ermete-unsigned.efi
           
-          rm -f build-uki/MOK.key build-uki/MOK.crt build-uki/vmlinuz-ermete-unsigned.efi
+          # DISTRUZIONE CRITTOGRAFICA: sovrascrive le pagine RAM con dati casuali e zeri, poi distrugge il file
+          shred --iterations=3 --random-source=/dev/urandom -u -z "$MOK_KEY_PATH"
+          shred --iterations=3 --random-source=/dev/urandom -u -z "$MOK_CRT_PATH"
+          rm -rf "$SECURE_VAULT"
+          rm -f build-uki/vmlinuz-ermete-unsigned.efi
 
       - name: Inject Signed UKI & Build Final eBPF Layer
         run: |
