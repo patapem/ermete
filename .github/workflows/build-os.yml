@@ -146,15 +146,25 @@ jobs:
           COSIGN_EXPERIMENTAL: "true"
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          # 1. Recupera l'hash esatto
           IMAGE_DIGEST=$(podman inspect --format='{{.Digest}}' localhost/gui-signed:latest)
           FULL_IMAGE_URI="ghcr.io/${{ env.IMAGE_NAME }}@${IMAGE_DIGEST}"
           
+          # 2. Login universale
           cosign login ghcr.io -u ${{ github.actor }} -p ${{ secrets.GITHUB_TOKEN }}
           
-          echo "Waiting for registry synchronization..."
+          # 3. TRUCCO INFALLIBILE: Esporta l'immagine su un file fisico per bypassare i limiti del demone
+          echo "Esportazione dell'immagine in file TAR..."
+          podman save -o ermete-image.tar localhost/gui-signed:latest
+          
+          # 4. Syft legge direttamente il file fisico (niente socket o connessioni remote)
+          echo "Generazione Distinta Base (SBOM)..."
+          syft docker-archive:ermete-image.tar -o spdx-json > ermete-os-sbom.spdx.json
+          
+          # 5. Pausa per l'indicizzazione cloud
+          echo "Attesa sincronizzazione del registro GHCR (20 secondi)..."
           sleep 20
           
-          syft "podman:localhost/gui-signed:latest" -o spdx-json > ermete-os-sbom.spdx.json
-          
+          # 6. Firme crittografiche
           cosign sign --yes "$FULL_IMAGE_URI"
           cosign attest --yes --predicate ermete-os-sbom.spdx.json --type spdx "$FULL_IMAGE_URI"
