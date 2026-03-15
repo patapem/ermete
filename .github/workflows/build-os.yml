@@ -27,7 +27,7 @@ jobs:
       id-token: write
     steps:
       - name: Deploy Zero-Trust Runtime Defense (eBPF Egress Filtering)
-        uses: step-security/harden-runner@a4aa98b93cab89d24a6b451122a20e4b2d56d2db
+        uses: step-security/harden-runner@v0
         with:
           disable-sudo: false
           egress-policy: audit
