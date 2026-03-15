@@ -4,8 +4,9 @@
 # 3. Rimozione totale logica decodifica Base64.
 # 4. Rimozione parametri 'root=ostree' dall'UKI.
 # 5. Sicurezza: Implementazione RAM-disk (/dev/shm) e shredding per protezione MOK_PRIV.
-# 6. Sicurezza: Implementazione digest pinning (SHA256) per SBOM.
-# 7. [ATTUALE] Bugfix: Aggiunta autenticazione registry condivisa (cosign/syft) e prefisso 'registry:' per bypassare errore UNAUTHORIZED.
+# 6. Sicurezza: Implementazione digest pinning (SHA256) per mitigazione Supply Chain attacks.
+# 7. Bugfix: Aggiunta autenticazione registry condivisa (cosign/syft).
+# 8. [ATTUALE] Bugfix: Aggiunta pausa di sincronizzazione (sleep 20) e scansione SBOM locale (podman:) per bypassare gli errori di indicizzazione GHCR.
 
 name: Build and Push Fedora Atomic OS
 on:
@@ -145,15 +146,15 @@ jobs:
           COSIGN_EXPERIMENTAL: "true"
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          IMAGE_DIGEST=$(podman inspect --format='{{.Digest}}' ghcr.io/${{ env.IMAGE_NAME }}:${{ steps.tags.outputs.sha_short }})
+          IMAGE_DIGEST=$(podman inspect --format='{{.Digest}}' localhost/gui-signed:latest)
           FULL_IMAGE_URI="ghcr.io/${{ env.IMAGE_NAME }}@${IMAGE_DIGEST}"
           
-          # 1. Autenticazione universale per i tool di sicurezza
           cosign login ghcr.io -u ${{ github.actor }} -p ${{ secrets.GITHUB_TOKEN }}
           
-          # 2. Estrazione SBOM direttamente dal registro cloud tramite il prefisso "registry:"
-          syft "registry:$FULL_IMAGE_URI" -o spdx-json > ermete-os-sbom.spdx.json
+          echo "Waiting for registry synchronization..."
+          sleep 20
           
-          # 3. Firma dell'immagine e attestazione della distinta base
+          syft "podman:localhost/gui-signed:latest" -o spdx-json > ermete-os-sbom.spdx.json
+          
           cosign sign --yes "$FULL_IMAGE_URI"
           cosign attest --yes --predicate ermete-os-sbom.spdx.json --type spdx "$FULL_IMAGE_URI"
