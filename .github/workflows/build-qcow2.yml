@@ -12,7 +12,7 @@ on:
 
 jobs:
   build-and-inject:
-    # RIATTIVATO: Ora parte in automatico se la build dell'OS è verde
+    # Mantenuto inibito temporaneamente finché build-os.yml non passa al verde
     if: false
     runs-on: ubuntu-latest
     permissions:
@@ -26,7 +26,6 @@ jobs:
       - name: Install Dependencies for Rootless Virtualization
         run: |
           sudo apt-get update
-          # Installiamo i tool in modalità sicura e aggiungiamo l'utente al gruppo KVM
           sudo apt-get install -y podman libguestfs-tools qemu-kvm
           sudo usermod -a -G kvm $USER
 
@@ -51,7 +50,6 @@ jobs:
           podman pull $IMAGE_REF
           
           echo "2. Avvio build disco osbuild (Senza --privileged)"
-          # Usiamo i permessi chirurgici come richiesto dall'audit
           sudo podman run --rm \
             --cap-add=SYS_ADMIN \
             --cap-add=MAC_ADMIN \
@@ -66,13 +64,11 @@ jobs:
         run: |
           mkdir -p /tmp/extracted
           
-          # ESTRAZIONE DA CONTAINER (Molto più sicuro e veloce che estrarre dal disco fuzzed)
           CONTAINER_ID=$(podman create $IMAGE_REF)
           podman cp ${CONTAINER_ID}:/usr/lib/modules/vmlinuz-ermete.efi /tmp/extracted/vmlinuz-ermete.efi
           podman cp ${CONTAINER_ID}:/usr/lib/systemd/boot/efi/systemd-bootx64.efi /tmp/extracted/BOOTX64.EFI
           podman rm ${CONTAINER_ID}
           
-          # INIEZIONE NEL DISCO TRAMITE GUESTFISH (Isolato e Rootless)
           export LIBGUESTFS_BACKEND=direct
           
           echo "Iniezione file nella partizione EFI (/dev/sda2)..."
@@ -85,7 +81,8 @@ jobs:
           upload /tmp/extracted/vmlinuz-ermete.efi /EFI/Ermete/vmlinuz-ermete.efi
           
           write /loader/loader.conf "default ermete.conf\ntimeout 3\nconsole-mode max\n"
-          write /loader/entries/ermete.conf "title Ermete OS (Secure UKI)\nefi /EFI/Ermete/vmlinuz-ermete.efi\noptions quiet rw intel_iommu=on slab_nomerge module.sig_enforce=1 root=ostree\n"
+          # Rimossa l'opzione "root=ostree" per rispettare la Discoverable Partitions Specification (DPS)
+          write /loader/entries/ermete.conf "title Ermete OS (Secure UKI)\nefi /EFI/Ermete/vmlinuz-ermete.efi\noptions quiet rw iommu=pt slab_nomerge module.sig_enforce=1 pci=noaer nmi_watchdog=0 mitigations=auto\n"
           EOF
           
           echo "Disco armato in sicurezza estrema."
