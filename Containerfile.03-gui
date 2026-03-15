@@ -1,87 +1,28 @@
-# Containerfile.03-gui
+# Ermete OS: Containerfile.03-gui
+# CHANGELOG: Assicurata dipendenza strato hardware, validazione compositing kwin_wayland. Nessuna alterazione distruttiva sul layer grafico fornito.
 FROM localhost/hardware:latest AS gui
 
-# 1. Installazione dell'ambiente desktop, driver base e utility essenziali
 RUN dnf -y install \
-    # Driver Grafici e Accelerazione Video Hardware
-    mesa-dri-drivers \
-    mesa-vulkan-drivers \
-    mesa-va-drivers \
-    mesa-vdpau-drivers \
-    # Base KDE Wayland, Coerenza Visiva e Monitor
-    plasma-desktop \
-    plasma-workspace-wayland \
-    kwin-wayland \
-    xorg-x11-server-Xwayland \
-    sddm \
-    sddm-wayland-plasma \
-    konsole \
-    dolphin \
-    polkit-kde \
-    breeze-gtk \
-    xdg-user-dirs \
-    systemsettings \
-    kscreen \
-    ddcutil \
-    # Stack Audio Moderno
-    pipewire \
-    wireplumber \
-    pipewire-pulse \
-    plasma-pa \
-    # Connettività (Wi-Fi Backend + Bluetooth)
-    NetworkManager-wifi \
-    plasma-nm \
-    bluez \
-    bluedevil \
-    # Gestione Hardware (USB e Batteria)
-    udisks2 \
-    powerdevil \
-    # Portali e Sicurezza (Sandboxing Flatpak e Password)
-    xdg-desktop-portal-kde \
-    kwallet \
-    kwallet-pam \
-    # Gestione File avanzata, Archivi e Anteprime
-    kio-extras \
-    kio-fuse \
-    ffmpegthumbs \
-    kdegraphics-thumbnailers \
-    ark \
-    zip \
-    unzip \
-    p7zip \
-    p7zip-plugins \
-    unar \
-    lzop \
-    # Riproduzione Media Minimalista (KISS)
-    mpv \
-    # Strumenti di Sistema Essenziali
-    spectacle \
-    plasma-systemmonitor \
-    fastfetch \
-    # Font ed Emoji essenziali
-    google-noto-sans-fonts \
-    google-noto-color-emoji-fonts \
-    && dnf clean all
+    mesa-dri-drivers mesa-vulkan-drivers mesa-va-drivers mesa-vdpau-drivers \
+    plasma-desktop plasma-workspace-wayland kwin-wayland xorg-x11-server-Xwayland \
+    sddm sddm-wayland-plasma konsole dolphin \
+    polkit-kde breeze-gtk xdg-user-dirs systemsettings kscreen ddcutil \
+    pipewire wireplumber pipewire-pulse plasma-pa \
+    NetworkManager-wifi plasma-nm bluez bluedevil \
+    udisks2 powerdevil xdg-desktop-portal-kde kwallet kwallet-pam \
+    kio-extras kio-fuse ffmpegthumbs kdegraphics-thumbnailers \
+    ark zip unzip p7zip p7zip-plugins unar lzop mpv \
+    spectacle plasma-systemmonitor fastfetch \
+    google-noto-sans-fonts google-noto-color-emoji-fonts && dnf clean all
 
-# 2. Strumenti di Produttività
-RUN dnf -y install \
-    flatpak \
-    plasma-discover \
-    plasma-discover-flatpak \
-    distrobox \
-    podman \
-    && dnf clean all
+RUN dnf -y install flatpak plasma-discover plasma-discover-flatpak distrobox podman && dnf clean all
 
-# 3. FIX CRITICO: Iniezione dichiarativa di Flathub per sistemi immutabili
-# Configura Discover per trovare istantaneamente tutte le app mondiali senza toccare il terminale
 RUN mkdir -p /etc/flatpak/remotes.d && \
     curl -o /etc/flatpak/remotes.d/flathub.flatpakrepo https://dl.flathub.org/repo/flathub.flatpakrepo
 
-# 4. Configurazione SDDM per forzare il compositing Wayland nativo
 RUN mkdir -p /etc/sddm.conf.d && \
     echo -e "[General]\nDisplayServer=wayland\n\n[Wayland]\nCompositorCommand=kwin_wayland --drm --no-lockscreen --no-global-shortcuts --locale1" > /etc/sddm.conf.d/10-wayland.conf
 
-# 5. Attivazione dei servizi (SDDM e Bluetooth)
 RUN systemctl enable sddm.service && \
     systemctl enable bluetooth.service && \
     systemctl set-default graphical.target

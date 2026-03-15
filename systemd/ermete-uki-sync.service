@@ -1,0 +1,16 @@
+[Unit]
+Description=Ermete OS UKI to ESP Synchronization Daemon
+Documentation=man:systemd-boot(7)
+# Condizione generica per attivarsi a prescindere dal nome del ramo OSTree (fedora o ermeteos)
+ConditionPathExists=/usr/lib/modules/vmlinuz-ermete.efi
+After=local-fs.target
+Before=shutdown.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/ermete-uki-sync.sh
+RemainAfterExit=yes
+StandardOutput=syslog
+
+[Install]
+WantedBy=multi-user.target

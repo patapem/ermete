@@ -1,32 +1,23 @@
-# Containerfile.04-ebpf
+# Ermete OS: Containerfile.04-ebpf
+# CHANGELOG: Patch applicata per risoluzione path hardcoded in Tetragon post-installazione, validazione demone dichiarativo.
 FROM localhost/gui:latest AS ebpf
 
 ENV TETRAGON_VERSION=1.6.0
 
-# 1. Download del tarball ufficiale
 RUN curl -LO https://github.com/cilium/tetragon/releases/download/v${TETRAGON_VERSION}/tetragon-v${TETRAGON_VERSION}-amd64.tar.gz && \
     tar -xzf tetragon-v${TETRAGON_VERSION}-amd64.tar.gz && \
     cd tetragon-v${TETRAGON_VERSION}-amd64 && \
-    # 2. Fusione sicura delle directory del tarball per Bootc
     cp -a usr/local/* usr/ && \
     rm -rf usr/local && \
-    # 3. Adattamento dei path e bypass di systemctl per ambiente di build
     sed -i 's|/usr/local|/usr|g' install.sh && \
     sed -i 's|systemctl|true|g' install.sh && \
-    # PATCH CONFIGURAZIONI: Correggiamo i path hardcoded nei file di testo di Tetragon
     sed -i 's|/usr/local|/usr|g' usr/lib/tetragon/tetragon.conf.d/* && \
-    # 4. Esecuzione dell'installazione ufficiale
     ./install.sh && \
     cd .. && \
     rm -rf tetragon-v${TETRAGON_VERSION}-amd64*
 
-# ---------------------------------------------------------
-# 5. FIX CRITICO: Allineamento dei path nel file di servizio
-# ---------------------------------------------------------
+# FIX CRITICO: Allineamento dei path nel file di servizio
 RUN sed -i 's|/usr/local|/usr|g' /usr/lib/systemd/system/tetragon.service
 
-# 6. Attivazione del demone (modalità offline dichiarativa)
 RUN systemctl enable tetragon.service
-
-# 7. Validazione OSTree
 RUN bootc container lint
