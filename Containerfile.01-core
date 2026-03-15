@@ -1,7 +1,7 @@
 # Ermete OS: Containerfile.01-core
 # CHANGELOG: Disabilitazione dracut client. Rimossi kargs ostree manuali. Integrazione bootupd.
-# CHANGELOG (Cloud-Native Fix): Sostituita iniezione MOK con ISV_DB. Implementato systemd-tmpfiles per la persistenza sicura di /var/home.
-# CHANGELOG (Bugfix): Rimossi pacchetti SELinux dalla direttiva dnf install per evitare conflitti (già preinstallati nell'immagine base bootc).
+# CHANGELOG (Cloud-Native Fix): Sostituita iniezione MOK con ISV_DB. Implementato systemd-tmpfiles per la persistenza di /var.
+# CHANGELOG (Bugfix DNF5): Pulizia direttive dnf. Rimossi pacchetti preinstallati nell'immagine bootc 43 e rimosso sbctl.
 
 FROM quay.io/fedora/fedora-bootc:43 AS core
 
@@ -11,25 +11,11 @@ ENV KERNEL_VERSION="stock" \
 # 1. Purga del Machine-ID per il deployment agnostico
 RUN truncate -s 0 /etc/machine-id
 
-# 2. Installazione toolset UKI/Secure Boot, bootupd e rimozione selettiva
-RUN dnf -y remove --setopt=strict=0 \
-    grubby \
-    dracut-config-rescue \
-    NetworkManager-ssh \
-    systemd-networkd && \
-    dnf -y install \
+# 2. Installazione toolset UKI/Secure Boot (solo i pacchetti strettamente mancanti)
+RUN dnf -y install \
     systemd-ukify \
     systemd-boot \
-    bootupd \
-    sbsigntools \
-    sbctl \
-    openssl \
-    efibootmgr \
-    composefs \
-    dracut-network \
-    zram-generator \
-    nftables \
-    systemd-resolved && \
+    sbsigntools && \
     dnf clean all
 
 # 3. Prevenzione esecuzione locale dracut tramite hard-linking
@@ -51,8 +37,7 @@ RUN systemctl enable nftables.service && \
     systemctl enable systemd-resolved.service && \
     sed -i 's/^SELINUX=.*/SELINUX=enforcing/' /etc/selinux/config
 
-# 6. Iniezione Asset Custom: ISV_DB (ex MOK) e UKI Sync Daemon
-# NOTA: Assicurati di rinominare questi file nel tuo repository locale!
+# 6. Iniezione Asset Custom: ISV_DB e UKI Sync Daemon
 COPY etc/pki/ermeteos/ISV_DB.der /etc/pki/ermeteos/ISV_DB.der
 COPY usr/local/bin/ermete-enroll-db.sh /usr/local/bin/ermete-enroll-db.sh
 COPY usr/local/bin/ermete-uki-sync.sh /usr/local/bin/ermete-uki-sync.sh
