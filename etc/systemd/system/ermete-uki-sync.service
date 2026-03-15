@@ -1,16 +1,10 @@
-# CHANGELOG: Definizione del servizio di sincronizzazione UKI basato su OSTree deploy.
 [Unit]
-Description=Ermete OS UKI to ESP Synchronization Daemon
-Documentation=man:systemd-boot(7)
-After=local-fs.target
-Before=boot-complete.target greenboot-healthcheck.service
-ConditionPathExists=/sysroot/ostree/deploy/ermeteos/deploy
+Description=Ermete OS UKI Sync Service
+ConditionPathExists=/usr/local/bin/ermete-uki-sync.sh
 
 [Service]
 Type=oneshot
 ExecStart=/usr/local/bin/ermete-uki-sync.sh
-RemainAfterExit=yes
-TimeoutSec=120
 
 [Install]
 WantedBy=multi-user.target

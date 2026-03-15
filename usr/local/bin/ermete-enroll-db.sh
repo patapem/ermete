@@ -1,0 +1,13 @@
+#!/bin/bash
+echo "==============================================================="
+echo " Ermete OS - UEFI Secure Boot Native Enrollment (ISV_DB)"
+echo "==============================================================="
+echo "Il certificato pubblico è pre-installato in: /etc/pki/ermeteos/ISV_DB.der"
+echo ""
+echo "Per autorizzare l'avvio bare-metal in Secure Boot:"
+echo "1. Riavvia il server fisico ed entra nel BIOS/UEFI."
+echo "2. Imposta il Secure Boot in 'Setup Mode' o 'Custom Mode'."
+echo "3. Naviga nel Key Management e seleziona 'Append/Add to Signature Database (db)'."
+echo "4. Seleziona il file ISV_DB.der dal filesystem EFI."
+echo "5. Salva le impostazioni, torna in 'User Mode' e riavvia."
+echo "==============================================================="
